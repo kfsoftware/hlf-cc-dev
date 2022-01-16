@@ -1,0 +1,16 @@
+schema:
+  - ./schema/**/*.graphql
+federation:
+  filename: gql/federation.go
+  package: gql
+
+resolver:
+  filename: gql/resolvers/resolvers.go
+  package: resolvers
+  type: Resolver
+exec:
+  filename: gql/generated.go
+  package: gql
+model:
+  filename: gql/models/models.go
+  package: models

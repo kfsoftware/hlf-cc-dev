@@ -1,0 +1,9 @@
+type Query {
+    chaincodes: [Chaincode!]
+}
+
+type Chaincode {
+    name: String!
+    version: String!
+    sequence: Int!
+}

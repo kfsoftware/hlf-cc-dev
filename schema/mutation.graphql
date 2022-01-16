@@ -1,0 +1,67 @@
+type Mutation {
+    deployChaincode(input: DeployChaincodeInput!): DeployChaincodeResponse!
+
+    # Chaincodes
+    invokeChaincode(input: InvokeChaincodeInput!): InvokeChaincodeResponse!
+    queryChaincode(input: QueryChaincodeInput!): QueryChaincodeResponse!
+}
+
+input QueryChaincodeInput {
+    chaincodeName: String!
+    function: String!
+    args: [String!]
+    transientMap: [TransientArgument!]
+}
+
+type QueryChaincodeResponse {
+    response: String!
+    chaincodeStatus: Int!
+}
+
+input InvokeChaincodeInput {
+    chaincodeName: String!
+    function: String!
+    args: [String!]
+    transientMap: [TransientArgument!]
+}
+input TransientArgument {
+    key: String!
+    value: String!
+}
+type InvokeChaincodeResponse {
+    response: String!
+    transactionID: String!
+    chaincodeStatus: Int!
+}
+
+
+input CreateTenantInput {
+    name: String!
+    orgs: [OrgInput!]
+}
+input OrgInput {
+    name: String!
+    mspID: String!
+}
+type Tenant {
+    id: Int!
+    name: String!
+    mspId: String!
+}
+
+type DeployChaincodeResponse {
+    packageID: String!
+    version: String!
+    sequence: Int!
+    chaincodeName: String!
+    privateKey: String!
+    certificate: String!
+    rootCertificate: String!
+    channelName: String!
+}
+input DeployChaincodeInput {
+    name: String!
+    tenantId: Int!
+    pdc: String!
+    chaincodeAddress: String!
+}

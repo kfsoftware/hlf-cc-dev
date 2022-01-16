@@ -1,0 +1,10 @@
+scalar Time
+scalar Upload
+scalar Any
+scalar Interval
+
+schema {
+    query: Query
+    mutation: Mutation
+}
+
