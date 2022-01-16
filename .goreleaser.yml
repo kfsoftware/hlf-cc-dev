@@ -40,8 +40,8 @@ dockers:
     goarch: amd64
     dockerfile: Dockerfile
     image_templates:
-      - "quay.io/kfsoftware/hlf-cc-dev:{{ .Tag }}"
-      - "quay.io/kfsoftware/hlf-cc-dev:latest"
+      - "ghcr.io/kfsoftware/hlf-cc-dev:{{ .Tag }}"
+      - "ghcr.io/kfsoftware/hlf-cc-dev:latest"
     extra_files:
       - LICENSE
       - README.md
