@@ -18,9 +18,6 @@ before:
 
 builds:
   -
-    id: hlf-cc-dev
-    dir: hlf-cc-dev
-    binary: hlf-cc-dev
     goos:
       - linux
       - darwin
