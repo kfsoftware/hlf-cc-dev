@@ -7,14 +7,12 @@ RUN \
 
 COPY CREDITS /licenses/CREDITS
 COPY LICENSE /licenses/LICENSE
-LABEL name="HLF Operator" \
+LABEL name="HLF CC Developer" \
       vendor="Kung Fu Software <dviejo@kungfusoftware.es>" \
       maintainer="Kung Fu Software <dviejo@kungfusoftware.es>" \
       version="v1.1.0" \
       release="v1.1.0"
 
-COPY charts /charts
+COPY hlf-cc-dev /hlf-cc-dev
 
-COPY hlf-operator /hlf-operator
-
-CMD ["/hlf-operator"]
+CMD ["/hlf-cc-dev"]
