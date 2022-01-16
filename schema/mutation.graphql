@@ -64,4 +64,5 @@ input DeployChaincodeInput {
     tenantId: Int!
     pdc: String!
     chaincodeAddress: String!
+    signaturePolicy: String!
 }

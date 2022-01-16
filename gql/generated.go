@@ -417,6 +417,7 @@ input DeployChaincodeInput {
     tenantId: Int!
     pdc: String!
     chaincodeAddress: String!
+    signaturePolicy: String!
 }
 `, BuiltIn: false},
 	{Name: "schema/query.graphql", Input: `type Query {
@@ -2640,6 +2641,14 @@ func (ec *executionContext) unmarshalInputDeployChaincodeInput(ctx context.Conte
 
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("chaincodeAddress"))
 			it.ChaincodeAddress, err = ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+		case "signaturePolicy":
+			var err error
+
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("signaturePolicy"))
+			it.SignaturePolicy, err = ec.unmarshalNString2string(ctx, v)
 			if err != nil {
 				return it, err
 			}

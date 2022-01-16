@@ -18,6 +18,7 @@ type DeployChaincodeInput struct {
 	TenantID         int    `json:"tenantId"`
 	Pdc              string `json:"pdc"`
 	ChaincodeAddress string `json:"chaincodeAddress"`
+	SignaturePolicy  string `json:"signaturePolicy"`
 }
 
 type DeployChaincodeResponse struct {

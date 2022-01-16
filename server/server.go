@@ -33,11 +33,13 @@ type BlockchainServerOpts struct {
 	MetricsAddress string
 	SDK            *fabsdk.FabricSDK
 	SDKContext     context.ClientProvider
-	Channel        string
-	MSPClient      *clientmsp.Client
-	CAConfig       *msp.CAConfig
-	Organization   string
-	User           string
+	SDKContextMap  map[string]context.ClientProvider
+
+	Channel      string
+	MSPClient    *clientmsp.Client
+	CAConfig     *msp.CAConfig
+	Organization string
+	User         string
 }
 
 type BlockchainAPIServer struct {
@@ -71,11 +73,12 @@ func (a *BlockchainAPIServer) setupHttpServer() http.Handler {
 	serverMux := http.NewServeMux()
 	config := gql.Config{
 		Resolvers: &resolvers.Resolver{
-			SDK:          a.SDK,
-			SDKContext:   a.SDKContext,
-			Channel:      a.Channel,
-			MSPClient:    a.MSPClient,
-			CAConfig:     a.CAConfig,
+			SDK:           a.SDK,
+			SDKContext:    a.SDKContext,
+			Channel:       a.Channel,
+			MSPClient:     a.MSPClient,
+			CAConfig:      a.CAConfig,
+			SDKContextMap: a.SDKContextMap,
 			Organization: a.Organization,
 			User:         a.User,
 		},

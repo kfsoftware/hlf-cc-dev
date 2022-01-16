@@ -2,8 +2,12 @@ package serve
 
 import (
 	"fmt"
+	"github.com/hyperledger/fabric-config/configtx"
 	clientmsp "github.com/hyperledger/fabric-sdk-go/pkg/client/msp"
+	"github.com/hyperledger/fabric-sdk-go/pkg/client/resmgmt"
+	"github.com/hyperledger/fabric-sdk-go/pkg/common/providers/context"
 	"github.com/hyperledger/fabric-sdk-go/pkg/core/config"
+	"github.com/hyperledger/fabric-sdk-go/pkg/fab/resource"
 	"github.com/hyperledger/fabric-sdk-go/pkg/fabsdk"
 	"github.com/hyperledger/fabric-sdk-go/pkg/msp"
 	"github.com/kfsoftware/hlf-cc-dev/server"
@@ -26,7 +30,7 @@ type serveCmd struct {
 }
 
 type serveConfig struct {
-	Fabric      struct {
+	Fabric struct {
 		Connection  string `json:"connection"`
 		Channel     string `json:"channel"`
 		Org         string `json:"org"`
@@ -124,11 +128,37 @@ func (c *serveCmd) run(conf *serveConfig) error {
 	if err != nil {
 		return err
 	}
+	resClient, err := resmgmt.New(sdkContext)
+	if err != nil {
+		return err
+	}
+
+	block, err := resClient.QueryConfigBlockFromOrderer(conf.Fabric.Channel)
+	if err != nil {
+		return err
+	}
+	cfgBlock, err := resource.ExtractConfigFromBlock(block)
+	if err != nil {
+		return err
+	}
+	cftxGen := configtx.New(cfgBlock)
+	appConf, err := cftxGen.Application().Configuration()
+	if err != nil {
+		return err
+	}
+	mapSdkContext := map[string]context.ClientProvider{}
+	for _, organization := range appConf.Organizations {
+		mapSdkContext[organization.Name] = sdk.Context(
+			fabsdk.WithUser(conf.Fabric.Org),
+			fabsdk.WithOrg(organization.Name),
+		)
+	}
 	opts := server.BlockchainServerOpts{
 		Address:        c.address,
 		MetricsAddress: c.metricsAddress,
 		SDK:            sdk,
 		SDKContext:     sdkContext,
+		SDKContextMap:  mapSdkContext,
 		Channel:        conf.Fabric.Channel,
 		MSPClient:      mspClient,
 		CAConfig:       caConfig,

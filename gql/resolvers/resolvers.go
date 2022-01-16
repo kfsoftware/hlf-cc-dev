@@ -11,13 +11,14 @@ import (
 )
 
 type Resolver struct {
-	SDK          *fabsdk.FabricSDK
-	SDKContext   context.ClientProvider
-	Channel      string
-	MSPClient    *clientmsp.Client
-	CAConfig     *msp.CAConfig
-	Organization string
-	User         string
+	SDK           *fabsdk.FabricSDK
+	SDKContext    context.ClientProvider
+	SDKContextMap map[string]context.ClientProvider
+	Channel       string
+	MSPClient     *clientmsp.Client
+	CAConfig      *msp.CAConfig
+	Organization  string
+	User          string
 }
 
 // Mutation returns gql.MutationResolver implementation.

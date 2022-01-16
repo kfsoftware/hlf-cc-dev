@@ -10,7 +10,6 @@ import (
 	"encoding/pem"
 	"fmt"
 	"github.com/gosimple/slug"
-	"github.com/hyperledger/fabric-config/configtx/membership"
 	pb "github.com/hyperledger/fabric-protos-go/peer"
 	"github.com/hyperledger/fabric-sdk-go/pkg/client/channel"
 	clientmsp "github.com/hyperledger/fabric-sdk-go/pkg/client/msp"
@@ -19,7 +18,6 @@ import (
 	"github.com/hyperledger/fabric-sdk-go/pkg/fab/ccpackager/lifecycle"
 	"github.com/hyperledger/fabric-sdk-go/pkg/fabsdk"
 	"github.com/hyperledger/fabric-sdk-go/third_party/github.com/hyperledger/fabric/common/policydsl"
-	"github.com/kfsoftware/hlf-cc-dev/ent"
 	"github.com/kfsoftware/hlf-cc-dev/gql/models"
 	"github.com/kfsoftware/hlf-cc-dev/log"
 	"github.com/lithammer/shortuuid/v3"
@@ -28,6 +26,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -170,7 +169,7 @@ func (m mutationResolver) DeployChaincode(ctx context.Context, input models.Depl
 	if err != nil {
 		return nil, err
 	}
-	userName := fmt.Sprintf("%s-%s", "chaincode", shortuuid.New()[:5])
+	userName := fmt.Sprintf("%s-%s", "chaincode", chaincodeName)
 	secret := shortuuid.New()
 	_, err = m.MSPClient.Register(&clientmsp.RegistrationRequest{
 		Name:           userName,
@@ -179,7 +178,7 @@ func (m mutationResolver) DeployChaincode(ctx context.Context, input models.Depl
 		CAName:         m.CAConfig.CAName,
 		Secret:         secret,
 	})
-	if err != nil {
+	if !strings.Contains(err.Error(), "is already registered"){
 		return nil, err
 	}
 	err = m.MSPClient.Enroll(
@@ -226,6 +225,7 @@ func (m mutationResolver) DeployChaincode(ctx context.Context, input models.Depl
 	}
 	version := "1"
 	sequence := 1
+
 	pkg, err := getChaincodePackage(chaincodeName, codeTarBytes)
 	if err != nil {
 		return nil, err
@@ -242,7 +242,7 @@ func (m mutationResolver) DeployChaincode(ctx context.Context, input models.Depl
 		return nil, err
 	}
 	packageID := lifecycle.ComputePackageID(chaincodeName, pkg)
-	signaturePolicy := fmt.Sprintf("OR('%s.member')", m.Organization)
+	signaturePolicy := input.SignaturePolicy
 	sp, err := policydsl.FromString(signaturePolicy)
 	if err != nil {
 		return nil, err
@@ -263,27 +263,33 @@ func (m mutationResolver) DeployChaincode(ctx context.Context, input models.Depl
 		}
 	}
 	log.Debugf("collections=%v", collections)
-	txID, err := resClient.LifecycleApproveCC(
-		m.Channel,
-		resmgmt.LifecycleApproveCCRequest{
-			Name:              chaincodeName,
-			Version:           version,
-			PackageID:         packageID,
-			Sequence:          int64(sequence),
-			EndorsementPlugin: "escc",
-			ValidationPlugin:  "vscc",
-			SignaturePolicy:   sp,
-			CollectionConfig:  collections,
-			InitRequired:      false,
-		},
-		resmgmt.WithTimeout(fab.ResMgmt, 2*time.Minute),
-		resmgmt.WithTimeout(fab.PeerResponse, 2*time.Minute),
-	)
-	if err != nil {
-		return nil, err
+	for mspID, sdkContext := range m.SDKContextMap {
+		resClient, err := resmgmt.New(sdkContext)
+		if err != nil {
+			return nil, err
+		}
+		txID, err := resClient.LifecycleApproveCC(
+			m.Channel,
+			resmgmt.LifecycleApproveCCRequest{
+				Name:              chaincodeName,
+				Version:           version,
+				PackageID:         packageID,
+				Sequence:          int64(sequence),
+				EndorsementPlugin: "escc",
+				ValidationPlugin:  "vscc",
+				SignaturePolicy:   sp,
+				CollectionConfig:  collections,
+				InitRequired:      false,
+			},
+			resmgmt.WithTimeout(fab.ResMgmt, 2*time.Minute),
+			resmgmt.WithTimeout(fab.PeerResponse, 2*time.Minute),
+		)
+		if err != nil {
+			return nil, err
+		}
+		log.Infof("%s Chaincode %s approved= %s", mspID, chaincodeName, txID)
 	}
-	log.Infof("Chaincode %s approved= %s", chaincodeName, txID)
-	commitReadiness , err := resClient.LifecycleCheckCCCommitReadiness(m.Channel,
+	commitReadiness, err := resClient.LifecycleCheckCCCommitReadiness(m.Channel,
 		resmgmt.LifecycleCheckCCCommitReadinessRequest{
 			Name:              chaincodeName,
 			Version:           version,
@@ -298,7 +304,7 @@ func (m mutationResolver) DeployChaincode(ctx context.Context, input models.Depl
 		return nil, err
 	}
 	log.Infof("Chaincode %s readiness= %v", chaincodeName, commitReadiness)
-	txID, err = resClient.LifecycleCommitCC(
+	txID, err := resClient.LifecycleCommitCC(
 		m.Channel,
 		resmgmt.LifecycleCommitCCRequest{
 			Name:              chaincodeName,
@@ -350,44 +356,6 @@ func ParseX509Certificate(contents []byte) (*x509.Certificate, error) {
 	return crt, nil
 }
 
-func mapNodeOUs(tenant *ent.Tenant) (membership.NodeOUs, error) {
-	clientCert, err := ParseX509Certificate(tenant.SignCertCACert)
-	if err != nil {
-		return membership.NodeOUs{}, nil
-	}
-	peerCert, err := ParseX509Certificate(tenant.SignCertCACert)
-	if err != nil {
-		return membership.NodeOUs{}, nil
-	}
-	adminCert, err := ParseX509Certificate(tenant.SignCertCACert)
-	if err != nil {
-		return membership.NodeOUs{}, nil
-	}
-	ordererCert, err := ParseX509Certificate(tenant.SignCertCACert)
-	if err != nil {
-		return membership.NodeOUs{}, nil
-	}
-	nodeOUs := membership.NodeOUs{
-		Enable: true,
-		ClientOUIdentifier: membership.OUIdentifier{
-			Certificate:                  clientCert,
-			OrganizationalUnitIdentifier: "client",
-		},
-		PeerOUIdentifier: membership.OUIdentifier{
-			Certificate:                  peerCert,
-			OrganizationalUnitIdentifier: "peer",
-		},
-		AdminOUIdentifier: membership.OUIdentifier{
-			Certificate:                  adminCert,
-			OrganizationalUnitIdentifier: "admin",
-		},
-		OrdererOUIdentifier: membership.OUIdentifier{
-			Certificate:                  ordererCert,
-			OrganizationalUnitIdentifier: "orderer",
-		},
-	}
-	return nodeOUs, nil
-}
 
 func (m mutationResolver) InvokeChaincode(ctx context.Context, input models.InvokeChaincodeInput) (*models.InvokeChaincodeResponse, error) {
 	chContext := m.SDK.ChannelContext(
