@@ -3,8 +3,9 @@ module github.com/kfsoftware/hlf-cc-dev
 go 1.16
 
 require (
-	entgo.io/ent v0.9.1
 	github.com/99designs/gqlgen v0.14.0
+	github.com/go-sql-driver/mysql v1.5.1-0.20200311113236-681ffa848bae // indirect
+	github.com/google/uuid v1.3.0 // indirect
 	github.com/gosimple/slug v1.12.0
 	github.com/hashicorp/yamux v0.0.0-20211028200310-0bc27b27de87
 	github.com/hyperledger/fabric-config v0.1.0
@@ -13,6 +14,8 @@ require (
 	github.com/kfsoftware/getout v0.0.4-beta4
 	github.com/lib/pq v1.10.2
 	github.com/lithammer/shortuuid/v3 v3.0.7
+	github.com/mattn/go-sqlite3 v1.14.8 // indirect
+	github.com/mitchellh/mapstructure v1.4.1 // indirect
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.7.1
 	github.com/shurcooL/graphql v0.0.0-20200928012149-18c5c3165e3a

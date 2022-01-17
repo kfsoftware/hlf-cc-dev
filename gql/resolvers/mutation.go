@@ -24,9 +24,8 @@ import (
 	"github.com/pkg/errors"
 	"io"
 	"net"
-	"os"
-	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -79,7 +78,7 @@ func getChaincodePackage(label string, codeTarGz []byte) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func getCodeTarGz(address string, rootCert string, clientKey string, clientCert string, metaInfPath string) ([]byte, error) {
+func getCodeTarGz(address string, rootCert string, clientKey string, clientCert string, couchDBIndices []*models.CouchDBIndex) ([]byte, error) {
 	var err error
 	connMap := map[string]interface{}{
 		"address":              address,
@@ -115,46 +114,24 @@ func getCodeTarGz(address string, rootCert string, clientKey string, clientCert 
 	if err != nil {
 		return nil, err
 	}
-	if metaInfPath != "" {
-		src := metaInfPath
-		// walk through 3 file in the folder
-		err = filepath.Walk(src, func(file string, fi os.FileInfo, err error) error {
-			// generate tar header
-			header, err := tar.FileInfoHeader(fi, file)
-			if err != nil {
-				return err
-			}
-
-			// must provide real name
-			// (see https://golang.org/src/archive/tar/common.go?#L626)
-			relname, err := filepath.Rel(src, file)
-			if err != nil {
-				return err
-			}
-			if relname == "." {
-				return nil
-			}
-			header.Name = "META-INF/" + filepath.ToSlash(relname)
-
+	if len(couchDBIndices) > 0 {
+		for _, couchDBIndex := range couchDBIndices {
+			header := new(tar.Header)
+			contentsBytes := []byte(couchDBIndex.Contents)
+			header.Mode = 0755
+			header.Size = int64(len(contentsBytes))
+			header.Name = "META-INF/statedb/couchdb/indexes/" + couchDBIndex.ID
 			// write header
 			if err := tw.WriteHeader(header); err != nil {
-				return err
+				return nil, err
 			}
 			// if not a dir, write file content
-			if !fi.IsDir() {
-				data, err := os.Open(file)
-				if err != nil {
-					return err
-				}
-				if _, err := io.Copy(tw, data); err != nil {
-					return err
-				}
+			r := bytes.NewReader(contentsBytes)
+			if _, err := io.Copy(tw, r); err != nil {
+				return nil, err
 			}
-			return nil
-		})
-		if err != nil {
-			return nil, err
 		}
+
 	}
 
 	tw.Close()
@@ -162,6 +139,14 @@ func getCodeTarGz(address string, rootCert string, clientKey string, clientCert 
 	return buf.Bytes(), nil
 }
 
+type mspFilter struct {
+	mspID string
+}
+
+// Accept returns true if this peer is to be included in the target list
+func (f *mspFilter) Accept(peer fab.Peer) bool {
+	return peer.MSPID() == f.mspID
+}
 func (m mutationResolver) DeployChaincode(ctx context.Context, input models.DeployChaincodeInput) (*models.DeployChaincodeResponse, error) {
 	chaincodeName := slug.Make(input.Name)
 	address := input.ChaincodeAddress
@@ -169,7 +154,7 @@ func (m mutationResolver) DeployChaincode(ctx context.Context, input models.Depl
 	if err != nil {
 		return nil, err
 	}
-	userName := fmt.Sprintf("%s-%s", "chaincode", chaincodeName)
+	userName := fmt.Sprintf("%s-%s", "chaincode", shortuuid.New()[:5])
 	secret := shortuuid.New()
 	_, err = m.MSPClient.Register(&clientmsp.RegistrationRequest{
 		Name:           userName,
@@ -178,7 +163,7 @@ func (m mutationResolver) DeployChaincode(ctx context.Context, input models.Depl
 		CAName:         m.CAConfig.CAName,
 		Secret:         secret,
 	})
-	if !strings.Contains(err.Error(), "is already registered"){
+	if err != nil && !strings.Contains(err.Error(), "is already registered") {
 		return nil, err
 	}
 	err = m.MSPClient.Enroll(
@@ -212,12 +197,13 @@ func (m mutationResolver) DeployChaincode(ctx context.Context, input models.Depl
 	rootCrt := string(caInfoResponse.CAChain)
 	privateKey := string(pk)
 	certificate := string(si.EnrollmentCertificate())
+
 	codeTarBytes, err := getCodeTarGz(
 		address,
 		rootCrt,
 		privateKey,
 		certificate,
-		"",
+		input.Indexes,
 	)
 	resClient, err := resmgmt.New(m.SDKContext)
 	if err != nil {
@@ -263,32 +249,42 @@ func (m mutationResolver) DeployChaincode(ctx context.Context, input models.Depl
 		}
 	}
 	log.Debugf("collections=%v", collections)
-	for mspID, sdkContext := range m.SDKContextMap {
-		resClient, err := resmgmt.New(sdkContext)
-		if err != nil {
-			return nil, err
-		}
-		txID, err := resClient.LifecycleApproveCC(
-			m.Channel,
-			resmgmt.LifecycleApproveCCRequest{
-				Name:              chaincodeName,
-				Version:           version,
-				PackageID:         packageID,
-				Sequence:          int64(sequence),
-				EndorsementPlugin: "escc",
-				ValidationPlugin:  "vscc",
-				SignaturePolicy:   sp,
-				CollectionConfig:  collections,
-				InitRequired:      false,
-			},
-			resmgmt.WithTimeout(fab.ResMgmt, 2*time.Minute),
-			resmgmt.WithTimeout(fab.PeerResponse, 2*time.Minute),
-		)
-		if err != nil {
-			return nil, err
-		}
-		log.Infof("%s Chaincode %s approved= %s", mspID, chaincodeName, txID)
+	approveCCRequest := resmgmt.LifecycleApproveCCRequest{
+		Name:              chaincodeName,
+		Version:           version,
+		PackageID:         packageID,
+		Sequence:          int64(sequence),
+		EndorsementPlugin: "escc",
+		ValidationPlugin:  "vscc",
+		SignaturePolicy:   sp,
+		CollectionConfig:  collections,
+		InitRequired:      false,
 	}
+	var wg sync.WaitGroup
+	wg.Add(len(m.SDKContextMap))
+	for mspID, sdkContext := range m.SDKContextMap {
+		mspID := mspID
+		sdkContext := sdkContext
+		go func() {
+			defer wg.Done()
+			resClient, err := resmgmt.New(sdkContext)
+			if err != nil {
+				log.Errorf("Error when creating resmgmt client: %v", err)
+				return
+			}
+			txID, err := resClient.LifecycleApproveCC(
+				m.Channel,
+				approveCCRequest,
+				resmgmt.WithTargetFilter(&mspFilter{mspID: mspID}),
+			)
+			if err != nil && !strings.Contains(err.Error(), "redefine uncommitted") {
+				log.Errorf("Error when approving chaincode: %v", err)
+				return
+			}
+			log.Infof("%s Chaincode %s approved= %s", mspID, chaincodeName, txID)
+		}()
+	}
+	wg.Wait()
 	commitReadiness, err := resClient.LifecycleCheckCCCommitReadiness(m.Channel,
 		resmgmt.LifecycleCheckCCCommitReadinessRequest{
 			Name:              chaincodeName,
@@ -355,7 +351,6 @@ func ParseX509Certificate(contents []byte) (*x509.Certificate, error) {
 	}
 	return crt, nil
 }
-
 
 func (m mutationResolver) InvokeChaincode(ctx context.Context, input models.InvokeChaincodeInput) (*models.InvokeChaincodeResponse, error) {
 	chContext := m.SDK.ChannelContext(

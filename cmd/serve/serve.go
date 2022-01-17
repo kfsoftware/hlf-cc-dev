@@ -148,9 +148,13 @@ func (c *serveCmd) run(conf *serveConfig) error {
 	}
 	mapSdkContext := map[string]context.ClientProvider{}
 	for _, organization := range appConf.Organizations {
+		sdk, err := fabsdk.New(configBackend)
+		if err != nil {
+			return err
+		}
 		mapSdkContext[organization.Name] = sdk.Context(
-			fabsdk.WithUser(conf.Fabric.Org),
-			fabsdk.WithOrg(organization.Name),
+			fabsdk.WithUser(conf.Fabric.User),
+			fabsdk.WithOrg(organization.MSP.Name),
 		)
 	}
 	opts := server.BlockchainServerOpts{

@@ -414,10 +414,14 @@ type DeployChaincodeResponse {
 }
 input DeployChaincodeInput {
     name: String!
-    tenantId: Int!
     pdc: String!
     chaincodeAddress: String!
     signaturePolicy: String!
+    indexes: [CouchDBIndex!]
+}
+input CouchDBIndex {
+    id: String!
+    contents: String!
 }
 `, BuiltIn: false},
 	{Name: "schema/query.graphql", Input: `type Query {
@@ -2572,6 +2576,37 @@ func (ec *executionContext) ___Type_ofType(ctx context.Context, field graphql.Co
 
 // region    **************************** input.gotpl *****************************
 
+func (ec *executionContext) unmarshalInputCouchDBIndex(ctx context.Context, obj interface{}) (models.CouchDBIndex, error) {
+	var it models.CouchDBIndex
+	asMap := map[string]interface{}{}
+	for k, v := range obj.(map[string]interface{}) {
+		asMap[k] = v
+	}
+
+	for k, v := range asMap {
+		switch k {
+		case "id":
+			var err error
+
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("id"))
+			it.ID, err = ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+		case "contents":
+			var err error
+
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("contents"))
+			it.Contents, err = ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+		}
+	}
+
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputCreateTenantInput(ctx context.Context, obj interface{}) (models.CreateTenantInput, error) {
 	var it models.CreateTenantInput
 	asMap := map[string]interface{}{}
@@ -2620,14 +2655,6 @@ func (ec *executionContext) unmarshalInputDeployChaincodeInput(ctx context.Conte
 			if err != nil {
 				return it, err
 			}
-		case "tenantId":
-			var err error
-
-			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("tenantId"))
-			it.TenantID, err = ec.unmarshalNInt2int(ctx, v)
-			if err != nil {
-				return it, err
-			}
 		case "pdc":
 			var err error
 
@@ -2649,6 +2676,14 @@ func (ec *executionContext) unmarshalInputDeployChaincodeInput(ctx context.Conte
 
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("signaturePolicy"))
 			it.SignaturePolicy, err = ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+		case "indexes":
+			var err error
+
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("indexes"))
+			it.Indexes, err = ec.unmarshalOCouchDBIndex2ᚕᚖgithubᚗcomᚋkfsoftwareᚋhlfᚑccᚑdevᚋgqlᚋmodelsᚐCouchDBIndexᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -3384,6 +3419,11 @@ func (ec *executionContext) marshalNChaincode2ᚖgithubᚗcomᚋkfsoftwareᚋhlf
 	return ec._Chaincode(ctx, sel, v)
 }
 
+func (ec *executionContext) unmarshalNCouchDBIndex2ᚖgithubᚗcomᚋkfsoftwareᚋhlfᚑccᚑdevᚋgqlᚋmodelsᚐCouchDBIndex(ctx context.Context, v interface{}) (*models.CouchDBIndex, error) {
+	res, err := ec.unmarshalInputCouchDBIndex(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) unmarshalNDeployChaincodeInput2githubᚗcomᚋkfsoftwareᚋhlfᚑccᚑdevᚋgqlᚋmodelsᚐDeployChaincodeInput(ctx context.Context, v interface{}) (models.DeployChaincodeInput, error) {
 	res, err := ec.unmarshalInputDeployChaincodeInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -3822,6 +3862,30 @@ func (ec *executionContext) marshalOChaincode2ᚕᚖgithubᚗcomᚋkfsoftwareᚋ
 	}
 
 	return ret
+}
+
+func (ec *executionContext) unmarshalOCouchDBIndex2ᚕᚖgithubᚗcomᚋkfsoftwareᚋhlfᚑccᚑdevᚋgqlᚋmodelsᚐCouchDBIndexᚄ(ctx context.Context, v interface{}) ([]*models.CouchDBIndex, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var vSlice []interface{}
+	if v != nil {
+		if tmp1, ok := v.([]interface{}); ok {
+			vSlice = tmp1
+		} else {
+			vSlice = []interface{}{v}
+		}
+	}
+	var err error
+	res := make([]*models.CouchDBIndex, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNCouchDBIndex2ᚖgithubᚗcomᚋkfsoftwareᚋhlfᚑccᚑdevᚋgqlᚋmodelsᚐCouchDBIndex(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
 }
 
 func (ec *executionContext) unmarshalOOrgInput2ᚕᚖgithubᚗcomᚋkfsoftwareᚋhlfᚑccᚑdevᚋgqlᚋmodelsᚐOrgInputᚄ(ctx context.Context, v interface{}) ([]*models.OrgInput, error) {

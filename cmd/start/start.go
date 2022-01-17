@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 	"github.com/hashicorp/yamux"
+	"github.com/kfsoftware/getout/pkg/tunnel"
 	"github.com/kfsoftware/hlf-cc-dev/gql/models"
 	"github.com/kfsoftware/hlf-cc-dev/log"
-	"github.com/kfsoftware/getout/pkg/tunnel"
 	"github.com/lithammer/shortuuid/v3"
 	"github.com/pkg/errors"
 	"github.com/shurcooL/graphql"
@@ -16,6 +16,7 @@ import (
 	"k8s.io/client-go/util/homedir"
 	"net"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 )
@@ -48,7 +49,6 @@ const (
 )
 
 type startCmd struct {
-	tenant                    int
 	chaincode                 string
 	localChaincodeAddress     string
 	tunnelAddress             string
@@ -58,14 +58,15 @@ type startCmd struct {
 	metaInf                   string
 	chaincodeAddress          string
 	chaincodeAddressSubdomain string
+	signaturePolicy           string
 }
 
 func (c startCmd) validate() error {
-	if c.tenant == 0 {
-		return errors.New("--tenant is required")
-	}
 	if c.chaincodeAddress == "" && c.chaincodeAddressSubdomain == "" {
 		return errors.New("either --chaincode or --chaincodeAddressSubdomain are required")
+	}
+	if c.signaturePolicy == "" {
+		return errors.New("--signaturePolicy is required")
 	}
 	if c.chaincode == "" {
 		return errors.New("--chaincode is required")
@@ -102,9 +103,9 @@ func (c startCmd) run() error {
 		p.CertsDir(c.chaincode),
 	)
 	if err != nil {
-		return err
+		log.Errorf("failed to ensure directories: %v", err)
+		return errors.Wrapf(err, "failed to ensure dirs")
 	}
-
 	gqlClient := graphql.NewClient(c.apiUrl, nil)
 	ctx := context.Background()
 	chaincodeAddress := c.chaincodeAddress
@@ -114,17 +115,49 @@ func (c startCmd) run() error {
 	}
 	pdcContents := ""
 	if c.pdcFile != "" {
-		pdcContentsBytes,err := ioutil.ReadFile(c.pdcFile)
+		pdcContentsBytes, err := ioutil.ReadFile(c.pdcFile)
 		if err != nil {
-			return err
+			return errors.Wrapf(err, "failed to read pdc file %q", c.pdcFile)
 		}
 		pdcContents = string(pdcContentsBytes)
 	}
+	var indices []*models.CouchDBIndex
+	if c.metaInf != "" {
+		src := c.metaInf
+		// walk through 3 file in the folder
+		err = filepath.Walk(src, func(file string, fi os.FileInfo, err error) error {
+			// must provide real name
+			// (see https://golang.org/src/archive/tar/common.go?#L626)
+			relname, err := filepath.Rel(src, file)
+			if err != nil {
+				return err
+			}
+			if relname == "." {
+				return nil
+			}
+			if strings.Contains(relname, "statedb/couchdb/indexes") && !fi.IsDir() {
+				contentBytes, err := ioutil.ReadFile(file)
+				if err != nil {
+					return err
+				}
+				index := &models.CouchDBIndex{
+					ID:       path.Base(relname),
+					Contents: string(contentBytes),
+				}
+				indices = append(indices, index)
+			}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+	}
 	input := models.DeployChaincodeInput{
 		Name:             c.chaincode,
-		TenantID:         c.tenant,
 		ChaincodeAddress: chaincodeAddress,
 		Pdc:              pdcContents,
+		SignaturePolicy:  c.signaturePolicy,
+		Indexes:          indices,
 	}
 	var m struct {
 		DeployChaincode struct {
@@ -236,7 +269,6 @@ func NewStartCmd() *cobra.Command {
 	f := cmd.Flags()
 	f.StringVar(&c.chaincodeAddress, "chaincodeAddress", "", "chaincode address to be accessed by the peer(needs to be publicly accessible)")
 	f.StringVar(&c.chaincodeAddressSubdomain, "chaincodeAddressSubdomain", "", "subdomain to be used for chaincode address, in this case, the address is generated automatically <guid>.<chaincodeAddressSubdomain>")
-	f.IntVar(&c.tenant, "tenant", 0, "tenant id")
 	f.StringVar(&c.chaincode, "chaincode", "", "chaincode name within the channel")
 	f.StringVar(&c.localChaincodeAddress, "localChaincode", "", "address of the local chaincode server, example: localhost:9999")
 	f.StringVar(&c.apiUrl, "apiUrl", "", "apiUrl to interact with the peers")
@@ -244,5 +276,6 @@ func NewStartCmd() *cobra.Command {
 	f.StringVar(&c.tunnelAddress, "tunnelAddress", "", "address of the local chaincode server, example: localhost:9999")
 	f.StringVar(&c.accessToken, "accessToken", "", "access token")
 	f.StringVar(&c.metaInf, "metaInf", "", "metadata")
+	f.StringVar(&c.signaturePolicy, "signaturePolicy", "", "Signature policy")
 	return cmd
 }

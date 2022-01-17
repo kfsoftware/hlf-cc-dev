@@ -8,17 +8,22 @@ type Chaincode struct {
 	Sequence int    `json:"sequence"`
 }
 
+type CouchDBIndex struct {
+	ID       string `json:"id"`
+	Contents string `json:"contents"`
+}
+
 type CreateTenantInput struct {
 	Name string      `json:"name"`
 	Orgs []*OrgInput `json:"orgs"`
 }
 
 type DeployChaincodeInput struct {
-	Name             string `json:"name"`
-	TenantID         int    `json:"tenantId"`
-	Pdc              string `json:"pdc"`
-	ChaincodeAddress string `json:"chaincodeAddress"`
-	SignaturePolicy  string `json:"signaturePolicy"`
+	Name             string          `json:"name"`
+	Pdc              string          `json:"pdc"`
+	ChaincodeAddress string          `json:"chaincodeAddress"`
+	SignaturePolicy  string          `json:"signaturePolicy"`
+	Indexes          []*CouchDBIndex `json:"indexes"`
 }
 
 type DeployChaincodeResponse struct {
