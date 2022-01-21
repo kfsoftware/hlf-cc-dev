@@ -2,6 +2,10 @@ package start
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/x509"
+	"encoding/base64"
+	"encoding/pem"
 	"fmt"
 	"github.com/hashicorp/yamux"
 	"github.com/kfsoftware/getout/pkg/tunnel"
@@ -96,6 +100,29 @@ func ensureDirs(paths ...string) error {
 	}
 	return nil
 }
+
+func ParsePKCS8PrivateKey(contents []byte) (*ecdsa.PrivateKey, error) {
+	block, _ := pem.Decode(contents)
+	key, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+	if err != nil {
+		return nil, err
+	}
+	ecdsaKey, ok := key.(*ecdsa.PrivateKey)
+	if !ok {
+		return nil, errors.New("private key is not of ECDSA type")
+	}
+	return ecdsaKey, nil
+}
+func ParseECDSAPrivateKey(contents []byte) (*ecdsa.PrivateKey, error) {
+	block, _ := pem.Decode(contents)
+	var ecdsaKey *ecdsa.PrivateKey
+	var err error
+	ecdsaKey, err = x509.ParseECPrivateKey(block.Bytes)
+	if err != nil {
+		return nil, err
+	}
+	return ecdsaKey, nil
+}
 func (c startCmd) run() error {
 	var err error
 	p := mustGetHLFCCPaths()
@@ -178,8 +205,17 @@ func (c startCmd) run() error {
 	if err != nil {
 		return err
 	}
+	pk, err := ParseECDSAPrivateKey([]byte(m.DeployChaincode.PrivateKey))
+	if err != nil {
+		return err
+	}
+	pkBytes, err := EncodePrivateKey(pk)
+	if err != nil {
+		return err
+	}
+	log.Infof("Private key: %s", string(pkBytes))
 	chaincodeKeyPath := filepath.Join(p.CertsDir(c.chaincode), "chaincode.key")
-	err = ioutil.WriteFile(chaincodeKeyPath, []byte(m.DeployChaincode.PrivateKey), 0777)
+	err = ioutil.WriteFile(chaincodeKeyPath, pkBytes, 0777)
 	if err != nil {
 		return err
 	}
@@ -193,13 +229,37 @@ func (c startCmd) run() error {
 	if err != nil {
 		return err
 	}
+
+	chaincodeKeyB64Path := filepath.Join(p.CertsDir(c.chaincode), "chaincode_b64.key")
+	err = ioutil.WriteFile(chaincodeKeyB64Path, []byte(base64.StdEncoding.EncodeToString(pkBytes)), 0777)
+	if err != nil {
+		return err
+	}
+	chaincodeCertB64Path := filepath.Join(p.CertsDir(c.chaincode), "chaincode_b64.pem")
+	err = ioutil.WriteFile(chaincodeCertB64Path, []byte(base64.StdEncoding.EncodeToString([]byte(m.DeployChaincode.Certificate))), 0777)
+	if err != nil {
+		return err
+	}
 	dotEnvFile := fmt.Sprintf(`
-export CORE_CHAINCODE_ID_NAME=%s
-export CORE_CHAINCODE_ADDRESS=%s
-export CORE_CHAINCODE_KEY_FILE=%s
-export CORE_CHAINCODE_CERT_FILE=%s
-export CORE_CHAINCODE_CA_FILE=%s
-`, m.DeployChaincode.PackageID, c.localChaincodeAddress, chaincodeKeyPath, chaincodeCertPath, caCertPath)
+CORE_CHAINCODE_ID_NAME=%s
+CORE_CHAINCODE_ADDRESS=%s
+CORE_CHAINCODE_KEY_FILE=%s
+CORE_CHAINCODE_CERT_FILE=%s
+CORE_CHAINCODE_CA_FILE=%s
+
+CORE_PEER_TLS_ROOTCERT_FILE=%s
+CORE_TLS_CLIENT_KEY_PATH=%s
+CORE_TLS_CLIENT_CERT_PATH=%s
+`,
+		m.DeployChaincode.PackageID,
+		c.localChaincodeAddress,
+		chaincodeKeyPath,
+		chaincodeCertPath,
+		caCertPath,
+		caCertPath,
+		chaincodeKeyB64Path,
+		chaincodeCertB64Path,
+	)
 	dotEnvPath := filepath.Join(p.CertsDir(c.chaincode), ".env")
 	err = ioutil.WriteFile(dotEnvPath, []byte(dotEnvFile), 0777)
 	if err != nil {
@@ -221,6 +281,18 @@ export CORE_CHAINCODE_CA_FILE=%s
 	}
 	return err
 }
+func EncodePrivateKey(key interface{}) ([]byte, error) {
+	signEncodedPK, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
+		return nil, err
+	}
+	pemPk := pem.EncodeToMemory(&pem.Block{
+		Type:  "PRIVATE KEY",
+		Bytes: signEncodedPK,
+	})
+	return pemPk, nil
+}
+
 func startTunnel(tunnelAddr string, localAddress string, sni string) error {
 	conn, err := net.Dial("tcp", tunnelAddr)
 	if err != nil {

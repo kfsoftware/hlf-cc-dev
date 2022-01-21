@@ -216,17 +216,6 @@ func (m mutationResolver) DeployChaincode(ctx context.Context, input models.Depl
 	if err != nil {
 		return nil, err
 	}
-	_, err = resClient.LifecycleInstallCC(
-		resmgmt.LifecycleInstallCCRequest{
-			Label:   input.Name,
-			Package: pkg,
-		},
-		resmgmt.WithTimeout(fab.ResMgmt, 2*time.Minute),
-		resmgmt.WithTimeout(fab.PeerResponse, 2*time.Minute),
-	)
-	if err != nil {
-		return nil, err
-	}
 	packageID := lifecycle.ComputePackageID(chaincodeName, pkg)
 	signaturePolicy := input.SignaturePolicy
 	sp, err := policydsl.FromString(signaturePolicy)
@@ -270,6 +259,18 @@ func (m mutationResolver) DeployChaincode(ctx context.Context, input models.Depl
 			resClient, err := resmgmt.New(sdkContext)
 			if err != nil {
 				log.Errorf("Error when creating resmgmt client: %v", err)
+				return
+			}
+			_, err = resClient.LifecycleInstallCC(
+				resmgmt.LifecycleInstallCCRequest{
+					Label:   input.Name,
+					Package: pkg,
+				},
+				resmgmt.WithTimeout(fab.ResMgmt, 2*time.Minute),
+				resmgmt.WithTimeout(fab.PeerResponse, 2*time.Minute),
+			)
+			if err != nil {
+				log.Errorf("Error when installing chaincode: %v", err)
 				return
 			}
 			txID, err := resClient.LifecycleApproveCC(
