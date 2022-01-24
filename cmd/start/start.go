@@ -63,6 +63,7 @@ type startCmd struct {
 	chaincodeAddress          string
 	chaincodeAddressSubdomain string
 	signaturePolicy           string
+	envFile                   string
 }
 
 func (c startCmd) validate() error {
@@ -241,15 +242,15 @@ func (c startCmd) run() error {
 		return err
 	}
 	dotEnvFile := fmt.Sprintf(`
-CORE_CHAINCODE_ID_NAME=%s
+CORE_CHAINCODE_ID=%s
 CORE_CHAINCODE_ADDRESS=%s
-CORE_CHAINCODE_KEY_FILE=%s
-CORE_CHAINCODE_CERT_FILE=%s
-CORE_CHAINCODE_CA_FILE=%s
+CORE_CHAINCODE_TLS_KEY_FILE=%s
+CORE_CHAINCODE_TLS_CERT_FILE=%s
+CORE_CHAINCODE_TLS_CLIENT_CACERT_FILE=%s
 
 CORE_PEER_TLS_ROOTCERT_FILE=%s
-CORE_TLS_CLIENT_KEY_PATH=%s
-CORE_TLS_CLIENT_CERT_PATH=%s
+CORE_TLS_CLIENT_KEY_FILE=%s
+CORE_TLS_CLIENT_CERT_FILE=%s
 `,
 		m.DeployChaincode.PackageID,
 		c.localChaincodeAddress,
@@ -264,6 +265,12 @@ CORE_TLS_CLIENT_CERT_PATH=%s
 	err = ioutil.WriteFile(dotEnvPath, []byte(dotEnvFile), 0777)
 	if err != nil {
 		return err
+	}
+	if c.envFile != "" {
+		err = ioutil.WriteFile(c.envFile, []byte(dotEnvFile), 0777)
+		if err != nil {
+			return err
+		}
 	}
 	sni, _, err := net.SplitHostPort(chaincodeAddress)
 	if err != nil {
@@ -349,5 +356,6 @@ func NewStartCmd() *cobra.Command {
 	f.StringVar(&c.accessToken, "accessToken", "", "access token")
 	f.StringVar(&c.metaInf, "metaInf", "", "metadata")
 	f.StringVar(&c.signaturePolicy, "signaturePolicy", "", "Signature policy")
+	f.StringVar(&c.envFile, "env-file", "", "Env file to write the environments")
 	return cmd
 }

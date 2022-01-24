@@ -11,7 +11,7 @@ require (
 	github.com/hyperledger/fabric-config v0.1.0
 	github.com/hyperledger/fabric-protos-go v0.0.0-20201028172056-a3136dde2354
 	github.com/hyperledger/fabric-sdk-go v1.0.0
-	github.com/kfsoftware/getout v0.0.4-beta4
+	github.com/kfsoftware/getout v0.0.4-beta2
 	github.com/lib/pq v1.10.2
 	github.com/lithammer/shortuuid/v3 v3.0.7
 	github.com/mattn/go-sqlite3 v1.14.8 // indirect
@@ -30,3 +30,4 @@ require (
 )
 
 replace github.com/go-kit/kit => github.com/go-kit/kit v0.8.0
+replace github.com/kfsoftware/getout => github.com/kfsoftware/getout v0.0.4-beta2

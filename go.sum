@@ -396,6 +396,8 @@ github.com/jtolds/gls v4.20.0+incompatible/go.mod h1:QJZ7F/aHp+rZTRtaJ1ow/lLfFfV
 github.com/julienschmidt/httprouter v1.2.0/go.mod h1:SYymIcj16QtmaHHD7aYtjjsJG7VTCxuUUipMqKk8s4w=
 github.com/julienschmidt/httprouter v1.3.0/go.mod h1:JR6WtHb+2LUe8TCKY3cZOxFyyO8IZAc4RVcycCCAKdM=
 github.com/justinas/alice v1.2.0/go.mod h1:fN5HRH/reO/zrUflLfTN43t3vXvKzvZIENsNEe7i7qA=
+github.com/kfsoftware/getout v0.0.4-beta2 h1:0PZhp24N4KyHEhVjayNcscSxith2PrBMSFE2o69TLmY=
+github.com/kfsoftware/getout v0.0.4-beta2/go.mod h1:5V6Cp5Yf/CzycuKXJc5cnL6hmNx+evl1X7yHNL9gB2M=
 github.com/kfsoftware/getout v0.0.4-beta4 h1:7nk6Gds4WDmNcSrgVnBuPPfKXBpOartCeymPYXe6tLM=
 github.com/kfsoftware/getout v0.0.4-beta4/go.mod h1:mB5QcbViWO6Pn9hH2WC2ITsXkTlAzuaIdxe21qSAVFM=
 github.com/kisielk/errcheck v1.1.0/go.mod h1:EZBBE59ingxPouuu3KfxchcWSUPOHkagtvWXihfKN4Q=
