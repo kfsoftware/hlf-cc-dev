@@ -42,9 +42,19 @@ func getChaincodePackage(label string, codeTarGz []byte) ([]byte, error) {
 
 	// set up the gzip writer
 	gw := gzip.NewWriter(buf)
-	defer gw.Close()
+	defer func(gw *gzip.Writer) {
+		err := gw.Close()
+		if err != nil {
+			log.Warnf("gzip.Writer.Close() failed: %s", err)
+		}
+	}(gw)
 	tw := tar.NewWriter(gw)
-	defer tw.Close()
+	defer func(tw *tar.Writer) {
+		err := tw.Close()
+		if err != nil {
+			log.Warnf("tar.Writer.Close() failed: %s", err)
+		}
+	}(tw)
 	header := new(tar.Header)
 	header.Name = "metadata.json"
 	metadataJsonBytes := []byte(metadataJson)
@@ -59,7 +69,6 @@ func getChaincodePackage(label string, codeTarGz []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	headerCode := new(tar.Header)
 	headerCode.Name = "code.tar.gz"
 	headerCode.Size = int64(len(codeTarGz))
@@ -73,8 +82,7 @@ func getChaincodePackage(label string, codeTarGz []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	tw.Close()
-	gw.Close()
+
 	return buf.Bytes(), nil
 }
 
@@ -93,13 +101,11 @@ func getCodeTarGz(address string, rootCert string, clientKey string, clientCert 
 	if err != nil {
 		return nil, err
 	}
-	log.Infof("Conn=%s", string(connJsonBytes))
+	log.Debugf("Conn=%s", string(connJsonBytes))
 	// set up the output file
 	buf := &bytes.Buffer{}
-
 	// set up the gzip writer
 	gw := gzip.NewWriter(buf)
-
 	tw := tar.NewWriter(gw)
 	header := new(tar.Header)
 	header.Name = "connection.json"
@@ -133,9 +139,14 @@ func getCodeTarGz(address string, rootCert string, clientKey string, clientCert 
 		}
 
 	}
-
-	tw.Close()
-	gw.Close()
+	err = tw.Close()
+	if err != nil {
+		return nil, err
+	}
+	err = gw.Close()
+	if err != nil {
+		return nil, err
+	}
 	return buf.Bytes(), nil
 }
 
@@ -197,7 +208,6 @@ func (m mutationResolver) DeployChaincode(ctx context.Context, input models.Depl
 	rootCrt := string(caInfoResponse.CAChain)
 	privateKey := string(pk)
 	certificate := string(si.EnrollmentCertificate())
-
 	codeTarBytes, err := getCodeTarGz(
 		address,
 		rootCrt,
