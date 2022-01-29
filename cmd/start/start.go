@@ -76,9 +76,6 @@ func (c startCmd) validate() error {
 	if c.chaincode == "" {
 		return errors.New("--chaincode is required")
 	}
-	if c.tunnelAddress == "" {
-		return errors.New("--tunnelAddress is required")
-	}
 	if c.localChaincodeAddress == "" {
 		return errors.New("--localChaincodeAddress is required")
 	}
@@ -243,6 +240,7 @@ func (c startCmd) run() error {
 	}
 	dotEnvFile := fmt.Sprintf(`
 CORE_CHAINCODE_ID=%s
+CORE_CHAINCODE_ID_NAME=%s
 CORE_CHAINCODE_ADDRESS=%s
 CORE_CHAINCODE_TLS_KEY_FILE=%s
 CORE_CHAINCODE_TLS_CERT_FILE=%s
@@ -252,6 +250,7 @@ CORE_PEER_TLS_ROOTCERT_FILE=%s
 CORE_TLS_CLIENT_KEY_FILE=%s
 CORE_TLS_CLIENT_CERT_FILE=%s
 `,
+		m.DeployChaincode.PackageID,
 		m.DeployChaincode.PackageID,
 		c.localChaincodeAddress,
 		chaincodeKeyPath,
