@@ -30,3 +30,4 @@ func (r *Resolver) Query() gql.QueryResolver { return &queryResolver{r} }
 type mutationResolver struct{ *Resolver }
 
 type queryResolver struct{ *Resolver }
+

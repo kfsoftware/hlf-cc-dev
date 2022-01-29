@@ -72,6 +72,7 @@ type ComplexityRoot struct {
 	}
 
 	Query struct {
+		Chaincode  func(childComplexity int, name string) int
 		Chaincodes func(childComplexity int) int
 	}
 
@@ -94,6 +95,7 @@ type MutationResolver interface {
 }
 type QueryResolver interface {
 	Chaincodes(ctx context.Context) ([]*models.Chaincode, error)
+	Chaincode(ctx context.Context, name string) (*models.Chaincode, error)
 }
 
 type executableSchema struct {
@@ -244,6 +246,18 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 		}
 
 		return e.complexity.Mutation.QueryChaincode(childComplexity, args["input"].(models.QueryChaincodeInput)), true
+
+	case "Query.chaincode":
+		if e.complexity.Query.Chaincode == nil {
+			break
+		}
+
+		args, err := ec.field_Query_chaincode_args(context.TODO(), rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.Chaincode(childComplexity, args["name"].(string)), true
 
 	case "Query.chaincodes":
 		if e.complexity.Query.Chaincodes == nil {
@@ -426,6 +440,7 @@ input CouchDBIndex {
 `, BuiltIn: false},
 	{Name: "schema/query.graphql", Input: `type Query {
     chaincodes: [Chaincode!]
+    chaincode(name: String!): Chaincode
 }
 
 type Chaincode {
@@ -508,6 +523,21 @@ func (ec *executionContext) field_Mutation_queryChaincode_args(ctx context.Conte
 }
 
 func (ec *executionContext) field_Query___type_args(ctx context.Context, rawArgs map[string]interface{}) (map[string]interface{}, error) {
+	var err error
+	args := map[string]interface{}{}
+	var arg0 string
+	if tmp, ok := rawArgs["name"]; ok {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("name"))
+		arg0, err = ec.unmarshalNString2string(ctx, tmp)
+		if err != nil {
+			return nil, err
+		}
+	}
+	args["name"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_chaincode_args(ctx context.Context, rawArgs map[string]interface{}) (map[string]interface{}, error) {
 	var err error
 	args := map[string]interface{}{}
 	var arg0 string
@@ -1206,6 +1236,45 @@ func (ec *executionContext) _Query_chaincodes(ctx context.Context, field graphql
 	res := resTmp.([]*models.Chaincode)
 	fc.Result = res
 	return ec.marshalOChaincode2ᚕᚖgithubᚗcomᚋkfsoftwareᚋhlfᚑccᚑdevᚋgqlᚋmodelsᚐChaincodeᚄ(ctx, field.Selections, res)
+}
+
+func (ec *executionContext) _Query_chaincode(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	defer func() {
+		if r := recover(); r != nil {
+			ec.Error(ctx, ec.Recover(ctx, r))
+			ret = graphql.Null
+		}
+	}()
+	fc := &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		Args:       nil,
+		IsMethod:   true,
+		IsResolver: true,
+	}
+
+	ctx = graphql.WithFieldContext(ctx, fc)
+	rawArgs := field.ArgumentMap(ec.Variables)
+	args, err := ec.field_Query_chaincode_args(ctx, rawArgs)
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	fc.Args = args
+	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
+		ctx = rctx // use context from middleware stack in children
+		return ec.resolvers.Query().Chaincode(rctx, args["name"].(string))
+	})
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	if resTmp == nil {
+		return graphql.Null
+	}
+	res := resTmp.(*models.Chaincode)
+	fc.Result = res
+	return ec.marshalOChaincode2ᚖgithubᚗcomᚋkfsoftwareᚋhlfᚑccᚑdevᚋgqlᚋmodelsᚐChaincode(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) _Query___type(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
@@ -3060,6 +3129,17 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 				res = ec._Query_chaincodes(ctx, field)
 				return res
 			})
+		case "chaincode":
+			field := field
+			out.Concurrently(i, func() (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_chaincode(ctx, field)
+				return res
+			})
 		case "__type":
 			out.Values[i] = ec._Query___type(ctx, field)
 		case "__schema":
@@ -3862,6 +3942,13 @@ func (ec *executionContext) marshalOChaincode2ᚕᚖgithubᚗcomᚋkfsoftwareᚋ
 	}
 
 	return ret
+}
+
+func (ec *executionContext) marshalOChaincode2ᚖgithubᚗcomᚋkfsoftwareᚋhlfᚑccᚑdevᚋgqlᚋmodelsᚐChaincode(ctx context.Context, sel ast.SelectionSet, v *models.Chaincode) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._Chaincode(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalOCouchDBIndex2ᚕᚖgithubᚗcomᚋkfsoftwareᚋhlfᚑccᚑdevᚋgqlᚋmodelsᚐCouchDBIndexᚄ(ctx context.Context, v interface{}) ([]*models.CouchDBIndex, error) {

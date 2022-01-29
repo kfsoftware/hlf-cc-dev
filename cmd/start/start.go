@@ -273,18 +273,21 @@ CORE_TLS_CLIENT_CERT_FILE=%s
 		}
 	}
 	sni, _, err := net.SplitHostPort(chaincodeAddress)
-	if err != nil {
-		return err
-	}
-	log.Infof("Channel: %s Chaincode: %s", m.DeployChaincode.ChaincodeName, m.DeployChaincode.ChannelName)
-	log.Infof("starting tunnel from %s to %s", c.localChaincodeAddress, chaincodeAddress)
-	err = startTunnel(
-		c.tunnelAddress,
-		c.localChaincodeAddress,
-		sni,
-	)
-	if err != nil {
-		return err
+	if c.tunnelAddress != "" && sni != "" {
+		if err != nil {
+			return err
+		}
+		log.Infof("Channel: %s Chaincode: %s", m.DeployChaincode.ChaincodeName, m.DeployChaincode.ChannelName)
+		log.Infof("starting tunnel from %s to %s", c.localChaincodeAddress, chaincodeAddress)
+
+		err = startTunnel(
+			c.tunnelAddress,
+			c.localChaincodeAddress,
+			sni,
+		)
+		if err != nil {
+			return err
+		}
 	}
 	return err
 }

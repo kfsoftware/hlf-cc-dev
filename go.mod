@@ -30,4 +30,5 @@ require (
 )
 
 replace github.com/go-kit/kit => github.com/go-kit/kit v0.8.0
+
 replace github.com/kfsoftware/getout => github.com/kfsoftware/getout v0.0.4-beta2
