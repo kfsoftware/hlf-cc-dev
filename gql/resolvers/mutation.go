@@ -33,7 +33,7 @@ func getChaincodePackage(label string, codeTarGz []byte) ([]byte, error) {
 	var err error
 	metadataJson := fmt.Sprintf(`
 {
-  "type": "external",
+  "type": "ccaas",
   "label": "%s"
 }
 `, label)

@@ -102,19 +102,7 @@ func ensureDirs(paths ...string) error {
 	return nil
 }
 
-func ParsePKCS8PrivateKey(contents []byte) (*ecdsa.PrivateKey, error) {
-	block, _ := pem.Decode(contents)
-	key, err := x509.ParsePKCS8PrivateKey(block.Bytes)
-	if err != nil {
-		return nil, err
-	}
-	ecdsaKey, ok := key.(*ecdsa.PrivateKey)
-	if !ok {
-		return nil, errors.New("private key is not of ECDSA type")
-	}
-	return ecdsaKey, nil
-}
-func ParseECDSAPrivateKey(contents []byte) (*ecdsa.PrivateKey, error) {
+func parseECDSAPrivateKey(contents []byte) (*ecdsa.PrivateKey, error) {
 	block, _ := pem.Decode(contents)
 	var ecdsaKey *ecdsa.PrivateKey
 	var err error
@@ -206,7 +194,7 @@ func (c startCmd) run() error {
 	if err != nil {
 		return err
 	}
-	pk, err := ParseECDSAPrivateKey([]byte(m.DeployChaincode.PrivateKey))
+	pk, err := parseECDSAPrivateKey([]byte(m.DeployChaincode.PrivateKey))
 	if err != nil {
 		return err
 	}
