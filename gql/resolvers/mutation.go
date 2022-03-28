@@ -10,6 +10,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"github.com/gosimple/slug"
+	"github.com/hyperledger/fabric-gateway/pkg/client"
 	pb "github.com/hyperledger/fabric-protos-go/peer"
 	"github.com/hyperledger/fabric-sdk-go/pkg/client/channel"
 	clientmsp "github.com/hyperledger/fabric-sdk-go/pkg/client/msp"
@@ -508,15 +509,21 @@ type collectionConfigJson struct {
 }
 
 func (m mutationResolver) QueryChaincode(ctx context.Context, input models.QueryChaincodeInput) (*models.QueryChaincodeResponse, error) {
-	chContext := m.SDK.ChannelContext(
-		m.Channel,
-		fabsdk.WithOrg(m.Organization),
-		fabsdk.WithUser(m.User),
-	)
-	chClient, err := channel.New(chContext)
-	if err != nil {
-		return nil, err
+	network := m.GWClient.GetNetwork(m.Channel)
+	contract := network.GetContract(input.ChaincodeName)
+	if contract == nil {
+		return nil, errors.Errorf("chaincode %s not found", input.ChaincodeName)
 	}
+	//
+	//chContext := m.SDK.ChannelContext(
+	//	m.Channel,
+	//	fabsdk.WithOrg(m.Organization),
+	//	fabsdk.WithUser(m.User),
+	//)
+	//chClient, err := channel.New(chContext)
+	//if err != nil {
+	//	return nil, err
+	//}
 	var byteArgs [][]byte
 	for _, arg := range input.Args {
 		byteArgs = append(byteArgs, []byte(arg))
@@ -525,21 +532,30 @@ func (m mutationResolver) QueryChaincode(ctx context.Context, input models.Query
 	for _, transient := range input.TransientMap {
 		transientMap[transient.Key] = []byte(transient.Value)
 	}
-	execReponse, err := chClient.Query(
-		channel.Request{
-			ChaincodeID:     input.ChaincodeName,
-			Fcn:             input.Function,
-			Args:            byteArgs,
-			TransientMap:    transientMap,
-			InvocationChain: []*fab.ChaincodeCall{},
-			IsInit:          false,
-		},
+	response, err := contract.Evaluate(
+		input.Function,
+		client.WithBytesArguments(byteArgs...),
+		client.WithTransient(transientMap),
+		client.WithEndorsingOrganizations("MEDIIOCHAINMSP"),
 	)
 	if err != nil {
 		return nil, err
 	}
+	//execReponse, err := chClient.Query(
+	//	channel.Request{
+	//		ChaincodeID:     input.ChaincodeName,
+	//		Fcn:             input.Function,
+	//		Args:            byteArgs,
+	//		TransientMap:    transientMap,
+	//		InvocationChain: []*fab.ChaincodeCall{},
+	//		IsInit:          false,
+	//	},
+	//)
+	//if err != nil {
+	//	return nil, err
+	//}
 	return &models.QueryChaincodeResponse{
-		Response:        string(execReponse.Payload),
-		ChaincodeStatus: int(execReponse.ChaincodeStatus),
+		Response:        string(response),
+		ChaincodeStatus: int(10),
 	}, nil
 }

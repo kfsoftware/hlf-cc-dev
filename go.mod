@@ -9,8 +9,9 @@ require (
 	github.com/gosimple/slug v1.12.0
 	github.com/hashicorp/yamux v0.0.0-20211028200310-0bc27b27de87
 	github.com/hyperledger/fabric-config v0.1.0
-	github.com/hyperledger/fabric-protos-go v0.0.0-20201028172056-a3136dde2354
-	github.com/hyperledger/fabric-sdk-go v1.0.0
+	github.com/hyperledger/fabric-gateway v1.0.1
+	github.com/hyperledger/fabric-protos-go v0.0.0-20220315113721-7dc293e117f7
+	github.com/hyperledger/fabric-sdk-go v1.0.1-0.20220124135247-4f34271d9b0f
 	github.com/kfsoftware/getout v0.0.4-beta2
 	github.com/lib/pq v1.10.2
 	github.com/lithammer/shortuuid/v3 v3.0.7
@@ -25,9 +26,10 @@ require (
 	github.com/spf13/viper v1.7.0
 	github.com/vektah/gqlparser/v2 v2.2.0
 	golang.org/x/crypto v0.0.0-20210920023735-84f357641f63 // indirect
-	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
+	google.golang.org/grpc v1.43.0
 	k8s.io/client-go v0.23.1
 )
 
 replace github.com/go-kit/kit => github.com/go-kit/kit v0.8.0
+
 replace github.com/kfsoftware/getout => github.com/kfsoftware/getout v0.0.4-beta2
