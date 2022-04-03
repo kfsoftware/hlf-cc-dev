@@ -7,18 +7,15 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"fmt"
-	"github.com/hashicorp/yamux"
-	"github.com/kfsoftware/getout/pkg/tunnel"
+	"github.com/kfsoftware/hlf-cc-dev/config"
 	"github.com/kfsoftware/hlf-cc-dev/gql/models"
 	"github.com/kfsoftware/hlf-cc-dev/log"
-	"github.com/lithammer/shortuuid/v3"
 	"github.com/pkg/errors"
 	"github.com/shurcooL/graphql"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"io/ioutil"
 	"k8s.io/client-go/util/homedir"
-	"net"
 	"os"
 	"path"
 	"path/filepath"
@@ -53,31 +50,26 @@ const (
 )
 
 type startCmd struct {
-	chaincode                 string
-	localChaincodeAddress     string
-	tunnelAddress             string
-	apiUrl                    string
-	pdcFile                   string
-	accessToken               string
-	metaInf                   string
-	chaincodeAddress          string
-	chaincodeAddressSubdomain string
-	signaturePolicy           string
-	envFile                   string
+	chaincode             string
+	localChaincodeAddress string
+	apiUrl                string
+	pdcFile               string
+	accessToken           string
+	metaInf               string
+	signaturePolicy       string
+	envFile               string
+	tunnelAddress         string
 }
 
 func (c startCmd) validate() error {
-	if c.chaincodeAddress == "" && c.chaincodeAddressSubdomain == "" {
-		return errors.New("either --chaincode or --chaincodeAddressSubdomain are required")
+	if c.tunnelAddress == "" {
+		return errors.New("--tunnel-addr is required")
 	}
 	if c.signaturePolicy == "" {
 		return errors.New("--signaturePolicy is required")
 	}
 	if c.chaincode == "" {
 		return errors.New("--chaincode is required")
-	}
-	if c.tunnelAddress == "" {
-		return errors.New("--tunnelAddress is required")
 	}
 	if c.localChaincodeAddress == "" {
 		return errors.New("--localChaincodeAddress is required")
@@ -124,11 +116,24 @@ func (c startCmd) run() error {
 	}
 	gqlClient := graphql.NewClient(c.apiUrl, nil)
 	ctx := context.Background()
-	chaincodeAddress := c.chaincodeAddress
-	if c.chaincodeAddressSubdomain != "" {
-		chaincodeAddressPrefix := strings.ToLower(shortuuid.New())
-		chaincodeAddress = fmt.Sprintf("%s.%s", chaincodeAddressPrefix, c.chaincodeAddressSubdomain)
+	tunnelConfig, err := config.NewTunnelConfig()
+	if err != nil {
+		return errors.Wrap(err, "failed to create tunnel config")
 	}
+	tunnelKey := fmt.Sprintf("%s_%s", c.localChaincodeAddress, c.tunnelAddress)
+	log.Debugf("tunnelKey: %s", tunnelKey)
+	tunnelCFGItem, err := tunnelConfig.Get(tunnelKey)
+	if err != nil {
+		return errors.Wrapf(err, `failed to get tunnel config, run the following command
+hlf-cc-dev listen --forward-to=%s --tunnel-addr="xxx:8082"
+`, c.localChaincodeAddress)
+	}
+
+	chaincodeAddress := tunnelCFGItem.SNI
+	//chaincodeAddress, _, err := net.SplitHostPort(fullChaincodeAddress)
+	//if err != nil {
+	//	return errors.Wrapf(err, "failed to parse chaincode address %s", fullChaincodeAddress)
+	//}
 	pdcContents := ""
 	if c.pdcFile != "" {
 		pdcContentsBytes, err := ioutil.ReadFile(c.pdcFile)
@@ -202,7 +207,6 @@ func (c startCmd) run() error {
 	if err != nil {
 		return err
 	}
-	log.Infof("Private key: %s", string(pkBytes))
 	chaincodeKeyPath := filepath.Join(p.CertsDir(c.chaincode), "chaincode.key")
 	err = ioutil.WriteFile(chaincodeKeyPath, pkBytes, 0777)
 	if err != nil {
@@ -260,20 +264,7 @@ CORE_TLS_CLIENT_CERT_FILE=%s
 			return err
 		}
 	}
-	sni, _, err := net.SplitHostPort(chaincodeAddress)
-	if err != nil {
-		return err
-	}
 	log.Infof("Channel: %s Chaincode: %s", m.DeployChaincode.ChaincodeName, m.DeployChaincode.ChannelName)
-	log.Infof("starting tunnel from %s to %s", c.localChaincodeAddress, chaincodeAddress)
-	err = startTunnel(
-		c.tunnelAddress,
-		c.localChaincodeAddress,
-		sni,
-	)
-	if err != nil {
-		return err
-	}
 	return err
 }
 func EncodePrivateKey(key interface{}) ([]byte, error) {
@@ -286,30 +277,6 @@ func EncodePrivateKey(key interface{}) ([]byte, error) {
 		Bytes: signEncodedPK,
 	})
 	return pemPk, nil
-}
-
-func startTunnel(tunnelAddr string, localAddress string, sni string) error {
-	conn, err := net.Dial("tcp", tunnelAddr)
-	if err != nil {
-		panic(err)
-	}
-	session, err := yamux.Client(conn, nil)
-	if err != nil {
-		panic(err)
-	}
-	tunnelCli := tunnel.NewTunnelClient(
-		session,
-		localAddress,
-	)
-	err = tunnelCli.StartTlsTunnel(sni)
-	if err != nil {
-		return err
-	}
-	err = tunnelCli.Start()
-	if err != nil {
-		return err
-	}
-	return nil
 }
 
 func NewStartCmd() *cobra.Command {
@@ -334,13 +301,11 @@ func NewStartCmd() *cobra.Command {
 		},
 	}
 	f := cmd.Flags()
-	f.StringVar(&c.chaincodeAddress, "chaincodeAddress", "", "chaincode address to be accessed by the peer(needs to be publicly accessible)")
-	f.StringVar(&c.chaincodeAddressSubdomain, "chaincodeAddressSubdomain", "", "subdomain to be used for chaincode address, in this case, the address is generated automatically <guid>.<chaincodeAddressSubdomain>")
 	f.StringVar(&c.chaincode, "chaincode", "", "chaincode name within the channel")
 	f.StringVar(&c.localChaincodeAddress, "localChaincode", "", "address of the local chaincode server, example: localhost:9999")
+	f.StringVar(&c.tunnelAddress, "tunnel-addr", "", "remote tunnel address, example: localhost:9999")
 	f.StringVar(&c.apiUrl, "apiUrl", "", "apiUrl to interact with the peers")
 	f.StringVar(&c.pdcFile, "pdc", "", "pdc file json, see examples/pdc.json")
-	f.StringVar(&c.tunnelAddress, "tunnelAddress", "", "address of the local chaincode server, example: localhost:9999")
 	f.StringVar(&c.accessToken, "accessToken", "", "access token")
 	f.StringVar(&c.metaInf, "metaInf", "", "metadata")
 	f.StringVar(&c.signaturePolicy, "signaturePolicy", "", "Signature policy")

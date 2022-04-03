@@ -13,7 +13,6 @@ import (
 	"github.com/hyperledger/fabric-sdk-go/pkg/fab/resource"
 	"github.com/hyperledger/fabric-sdk-go/pkg/fabsdk"
 	"github.com/hyperledger/fabric-sdk-go/pkg/msp"
-	"github.com/kfsoftware/hlf-cc-dev/log"
 	"github.com/kfsoftware/hlf-cc-dev/server"
 	_ "github.com/lib/pq"
 	"github.com/pkg/errors"
@@ -101,9 +100,7 @@ func getGatewayParams(serve *serveConfig, sdk *fabsdk.FabricSDK) (*GatewayParams
 		return nil, err
 	}
 	adminCertPem, _ := configBackend1.Lookup(fmt.Sprintf("organizations.%s.users.admin.cert.pem", serve.Fabric.Org))
-	log.Infof("adminCertPem: %v", adminCertPem)
 	adminCertKey, _ := configBackend1.Lookup(fmt.Sprintf("organizations.%s.users.admin.key.pem", serve.Fabric.Org))
-	log.Infof("adminCertKey: %v", adminCertKey)
 	peersInt, _ := configBackend1.Lookup(fmt.Sprintf("organizations.%s.peers", serve.Fabric.Org))
 	peersArrayInterface := peersInt.([]interface{})
 	var peers []string
@@ -119,8 +116,6 @@ func getGatewayParams(serve *serveConfig, sdk *fabsdk.FabricSDK) (*GatewayParams
 		peerTLSCACertInt, _ := configBackend1.Lookup(peerTLSCACertKey)
 		peerUrl = strings.Replace(peerUrlInt.(string), "grpcs://", "", -1)
 		peerTLSCACert = []byte(peerTLSCACertInt.(string))
-		//log.Infof("peerUrl: %v", peerUrl)
-		//log.Infof("peerTLSCACert: %v", peerTLSCACert)
 		idx++
 		if idx >= 1 {
 			break
@@ -218,12 +213,6 @@ func (c *serveCmd) run(conf *serveConfig) error {
 	if err != nil {
 		return err
 	}
-	//clientConn := getClientCollection()
-	//defer clientConn.Close()
-	//gwClient, err := getGateway(conf, clientConn)
-	//if err != nil {
-	//	return err
-	//}
 	opts := server.BlockchainServerOpts{
 		Address:        c.address,
 		MetricsAddress: c.metricsAddress,
