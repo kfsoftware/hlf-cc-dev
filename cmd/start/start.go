@@ -7,6 +7,12 @@ import (
 	"encoding/base64"
 	"encoding/pem"
 	"fmt"
+	"io/ioutil"
+	"os"
+	"path"
+	"path/filepath"
+	"strings"
+
 	"github.com/kfsoftware/hlf-cc-dev/config"
 	"github.com/kfsoftware/hlf-cc-dev/gql/models"
 	"github.com/kfsoftware/hlf-cc-dev/log"
@@ -14,12 +20,7 @@ import (
 	"github.com/shurcooL/graphql"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"io/ioutil"
 	"k8s.io/client-go/util/homedir"
-	"os"
-	"path"
-	"path/filepath"
-	"strings"
 )
 
 type Paths struct {
@@ -235,6 +236,7 @@ hlf-cc-dev listen --forward-to=%s --tunnel-addr="xxx:8082"
 	}
 	dotEnvFile := fmt.Sprintf(`
 CORE_CHAINCODE_ID=%s
+CORE_CHAINCODE_ID_NAME=%s
 CORE_CHAINCODE_ADDRESS=%s
 CORE_CHAINCODE_TLS_KEY_FILE=%s
 CORE_CHAINCODE_TLS_CERT_FILE=%s
@@ -244,6 +246,7 @@ CORE_PEER_TLS_ROOTCERT_FILE=%s
 CORE_TLS_CLIENT_KEY_FILE=%s
 CORE_TLS_CLIENT_CERT_FILE=%s
 `,
+		m.DeployChaincode.PackageID,
 		m.DeployChaincode.PackageID,
 		c.localChaincodeAddress,
 		chaincodeKeyPath,
