@@ -64,7 +64,7 @@ type startCmd struct {
 
 func (c startCmd) validate() error {
 	if c.tunnelAddress == "" {
-		return errors.New("--tunnel-addr is required")
+		return errors.New("--tunnelAddress is required")
 	}
 	if c.signaturePolicy == "" {
 		return errors.New("--signaturePolicy is required")
@@ -126,7 +126,7 @@ func (c startCmd) run() error {
 	tunnelCFGItem, err := tunnelConfig.Get(tunnelKey)
 	if err != nil {
 		return errors.Wrapf(err, `failed to get tunnel config, run the following command
-hlf-cc-dev listen --forward-to=%s --tunnel-addr="xxx:8082"
+hlf-cc-dev listen --forward-to=%s --tunnelAddress="xxx:8082"
 `, c.localChaincodeAddress)
 	}
 
@@ -306,7 +306,7 @@ func NewStartCmd() *cobra.Command {
 	f := cmd.Flags()
 	f.StringVar(&c.chaincode, "chaincode", "", "chaincode name within the channel")
 	f.StringVar(&c.localChaincodeAddress, "localChaincode", "", "address of the local chaincode server, example: localhost:9999")
-	f.StringVar(&c.tunnelAddress, "tunnel-addr", "", "remote tunnel address, example: localhost:9999")
+	f.StringVar(&c.tunnelAddress, "tunnelAddress", "", "remote tunnel address, example: localhost:9999")
 	f.StringVar(&c.apiUrl, "apiUrl", "", "apiUrl to interact with the peers")
 	f.StringVar(&c.pdcFile, "pdc", "", "pdc file json, see examples/pdc.json")
 	f.StringVar(&c.accessToken, "accessToken", "", "access token")

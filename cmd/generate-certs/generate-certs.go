@@ -2,10 +2,9 @@ package generate_certs
 
 import (
 	"context"
-	"github.com/hashicorp/yamux"
+	"github.com/kfsoftware/getout/pkg/tunnel"
 	"github.com/kfsoftware/hlf-cc-dev/gql/models"
 	"github.com/kfsoftware/hlf-cc-dev/log"
-	"github.com/kfsoftware/getout/pkg/tunnel"
 	"github.com/pkg/errors"
 	"github.com/shurcooL/graphql"
 	"github.com/spf13/cobra"
@@ -107,7 +106,6 @@ func (c startCmd) run() error {
 	ctx := context.Background()
 	input := models.DeployChaincodeInput{
 		Name:             c.chaincode,
-		TenantID:         c.tenant,
 		ChaincodeAddress: c.chaincodeAddress,
 	}
 	var m struct {
@@ -158,23 +156,10 @@ func (c startCmd) run() error {
 	return err
 }
 func startTunnel(tunnelAddr string, localAddress string, sni string) error {
-	conn, err := net.Dial("tcp", tunnelAddr)
-	if err != nil {
-		panic(err)
-	}
-	session, err := yamux.Client(conn, nil)
-	if err != nil {
-		panic(err)
-	}
 	tunnelCli := tunnel.NewTunnelClient(
-		session,
-		localAddress,
+		tunnelAddr,
 	)
-	err = tunnelCli.StartTlsTunnel(sni)
-	if err != nil {
-		return err
-	}
-	err = tunnelCli.Start()
+	err := tunnelCli.StartTlsTunnel(sni, localAddress)
 	if err != nil {
 		return err
 	}
