@@ -29,21 +29,17 @@ func (c listenCmd) validate() error {
 }
 
 func (c listenCmd) run() error {
-	hostname := strings.ToLower(shortuuid.New()[:10])
 	var sni string
 	tunnelAddress := c.tunnelAddress
 	tunnelConfig, err := config.NewTunnelConfig()
 	if err != nil {
 		return err
 	}
-	//tunnelRequestsHost, tunnelRequestsPort, err := net.SplitHostPort(c.tunnelSubdomain)
-	//if err != nil {
-	//	return err
-	//}
 	tunnelKey := fmt.Sprintf("%s_%s", c.forwardTo, c.tunnelAddress)
 	log.Debugf("tunnelKey: %s", tunnelKey)
 	cfgItem, err := tunnelConfig.Get(tunnelKey)
 	if err != nil {
+		hostname := strings.ToLower(shortuuid.New()[:10])
 		sni = fmt.Sprintf("%s.%s", hostname, c.tunnelSubdomain)
 		_, err = tunnelConfig.Add(tunnelKey, config.TunnelConfigItem{
 			ForwardTo: c.forwardTo,
@@ -70,6 +66,9 @@ func (c listenCmd) run() error {
 			log.Errorf("Error starting the tunnel: %s", err)
 			log.Infof("Retrying in 5 seconds...")
 			time.Sleep(5 * time.Second)
+		} else {
+			log.Infof("Tunnel closed")
+			break
 		}
 	}
 	return nil
