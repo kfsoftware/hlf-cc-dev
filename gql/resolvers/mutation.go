@@ -12,12 +12,10 @@ import (
 	"github.com/gosimple/slug"
 	"github.com/hyperledger/fabric-gateway/pkg/client"
 	pb "github.com/hyperledger/fabric-protos-go/peer"
-	"github.com/hyperledger/fabric-sdk-go/pkg/client/channel"
 	clientmsp "github.com/hyperledger/fabric-sdk-go/pkg/client/msp"
 	"github.com/hyperledger/fabric-sdk-go/pkg/client/resmgmt"
 	"github.com/hyperledger/fabric-sdk-go/pkg/common/providers/fab"
 	"github.com/hyperledger/fabric-sdk-go/pkg/fab/ccpackager/lifecycle"
-	"github.com/hyperledger/fabric-sdk-go/pkg/fabsdk"
 	"github.com/hyperledger/fabric-sdk-go/third_party/github.com/hyperledger/fabric/common/policydsl"
 	"github.com/kfsoftware/hlf-cc-dev/gql/models"
 	"github.com/kfsoftware/hlf-cc-dev/log"
@@ -83,7 +81,15 @@ func getChaincodePackage(label string, codeTarGz []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-
+	err = tw.Close()
+	if err != nil {
+		return nil, err
+	}
+	err = gw.Close()
+	if err != nil {
+		log.Warnf("gzip.Writer.Close() failed: %s", err)
+		return nil, err
+	}
 	return buf.Bytes(), nil
 }
 
@@ -233,7 +239,11 @@ func (m mutationResolver) DeployChaincode(ctx context.Context, input models.Depl
 	if err != nil {
 		return nil, err
 	}
-	committedCCs, err := resClient.LifecycleQueryCommittedCC(m.Channel, resmgmt.LifecycleQueryCommittedCCRequest{Name: chaincodeName})
+	channel := m.Channel
+	if input.Channel != "" {
+		channel = input.Channel
+	}
+	committedCCs, err := resClient.LifecycleQueryCommittedCC(channel, resmgmt.LifecycleQueryCommittedCCRequest{Name: chaincodeName})
 	if err != nil {
 		log.Warnf("Error when getting commited chaincodes: %v", err)
 	}
@@ -285,7 +295,7 @@ func (m mutationResolver) DeployChaincode(ctx context.Context, input models.Depl
 				return
 			}
 			txID, err := resClient.LifecycleApproveCC(
-				m.Channel,
+				channel,
 				approveCCRequest,
 				resmgmt.WithTargetFilter(&mspFilter{mspID: mspID}),
 			)
@@ -297,7 +307,7 @@ func (m mutationResolver) DeployChaincode(ctx context.Context, input models.Depl
 		}()
 	}
 	wg.Wait()
-	commitReadiness, err := resClient.LifecycleCheckCCCommitReadiness(m.Channel,
+	commitReadiness, err := resClient.LifecycleCheckCCCommitReadiness(channel,
 		resmgmt.LifecycleCheckCCCommitReadinessRequest{
 			Name:              chaincodeName,
 			Version:           version,
@@ -313,7 +323,7 @@ func (m mutationResolver) DeployChaincode(ctx context.Context, input models.Depl
 	}
 	log.Infof("Chaincode %s readiness= %v", chaincodeName, commitReadiness)
 	txID, err := resClient.LifecycleCommitCC(
-		m.Channel,
+		channel,
 		resmgmt.LifecycleCommitCCRequest{
 			Name:              chaincodeName,
 			Version:           version,
@@ -332,7 +342,7 @@ func (m mutationResolver) DeployChaincode(ctx context.Context, input models.Depl
 	}
 	log.Infof("Chaincode %s committed= %s", chaincodeName, txID)
 	return &models.DeployChaincodeResponse{
-		ChannelName:     m.Channel,
+		ChannelName:     channel,
 		PackageID:       packageID,
 		Version:         version,
 		Sequence:        sequence,
@@ -365,14 +375,14 @@ func ParseX509Certificate(contents []byte) (*x509.Certificate, error) {
 }
 
 func (m mutationResolver) InvokeChaincode(ctx context.Context, input models.InvokeChaincodeInput) (*models.InvokeChaincodeResponse, error) {
-	chContext := m.SDK.ChannelContext(
-		m.Channel,
-		fabsdk.WithOrg(m.Organization),
-		fabsdk.WithUser(m.User),
-	)
-	chClient, err := channel.New(chContext)
-	if err != nil {
-		return nil, err
+	ch := m.Channel
+	if input.Channel != nil && *input.Channel != "" {
+		ch = *input.Channel
+	}
+	network := m.GWClient.GetNetwork(ch)
+	contract := network.GetContract(input.ChaincodeName)
+	if contract == nil {
+		return nil, errors.Errorf("chaincode %s not found", input.ChaincodeName)
 	}
 	var byteArgs [][]byte
 	for _, arg := range input.Args {
@@ -383,23 +393,22 @@ func (m mutationResolver) InvokeChaincode(ctx context.Context, input models.Invo
 	for _, transient := range input.TransientMap {
 		transientMap[transient.Key] = []byte(transient.Value)
 	}
-	execReponse, err := chClient.Execute(
-		channel.Request{
-			ChaincodeID:     input.ChaincodeName,
-			Fcn:             input.Function,
-			Args:            byteArgs,
-			TransientMap:    transientMap,
-			InvocationChain: []*fab.ChaincodeCall{},
-			IsInit:          false,
-		},
+	result, commit, err := contract.SubmitAsync(
+		input.Function,
+		client.WithBytesArguments(byteArgs...),
+		client.WithTransient(transientMap),
 	)
 	if err != nil {
 		return nil, err
 	}
+	status, err := commit.Status()
+	if err != nil {
+		return nil, err
+	}
 	return &models.InvokeChaincodeResponse{
-		Response:        string(execReponse.Payload),
-		ChaincodeStatus: int(execReponse.ChaincodeStatus),
-		TransactionID:   string(execReponse.TransactionID),
+		Response:        string(result),
+		ChaincodeStatus: int(status.Code),
+		TransactionID:   status.TransactionID,
 	}, nil
 }
 
@@ -519,21 +528,15 @@ type collectionConfigJson struct {
 }
 
 func (m mutationResolver) QueryChaincode(ctx context.Context, input models.QueryChaincodeInput) (*models.QueryChaincodeResponse, error) {
-	network := m.GWClient.GetNetwork(m.Channel)
+	ch := m.Channel
+	if input.Channel != nil && *input.Channel != "" {
+		ch = *input.Channel
+	}
+	network := m.GWClient.GetNetwork(ch)
 	contract := network.GetContract(input.ChaincodeName)
 	if contract == nil {
 		return nil, errors.Errorf("chaincode %s not found", input.ChaincodeName)
 	}
-	//
-	//chContext := m.SDK.ChannelContext(
-	//	m.Channel,
-	//	fabsdk.WithOrg(m.Organization),
-	//	fabsdk.WithUser(m.User),
-	//)
-	//chClient, err := channel.New(chContext)
-	//if err != nil {
-	//	return nil, err
-	//}
 	var byteArgs [][]byte
 	for _, arg := range input.Args {
 		byteArgs = append(byteArgs, []byte(arg))
@@ -546,24 +549,10 @@ func (m mutationResolver) QueryChaincode(ctx context.Context, input models.Query
 		input.Function,
 		client.WithBytesArguments(byteArgs...),
 		client.WithTransient(transientMap),
-		client.WithEndorsingOrganizations("MEDIIOCHAINMSP"),
 	)
 	if err != nil {
 		return nil, err
 	}
-	//execReponse, err := chClient.Query(
-	//	channel.Request{
-	//		ChaincodeID:     input.ChaincodeName,
-	//		Fcn:             input.Function,
-	//		Args:            byteArgs,
-	//		TransientMap:    transientMap,
-	//		InvocationChain: []*fab.ChaincodeCall{},
-	//		IsInit:          false,
-	//	},
-	//)
-	//if err != nil {
-	//	return nil, err
-	//}
 	return &models.QueryChaincodeResponse{
 		Response:        string(response),
 		ChaincodeStatus: int(10),

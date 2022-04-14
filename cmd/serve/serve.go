@@ -143,7 +143,6 @@ func (c *serveCmd) run(conf *serveConfig) error {
 		fabsdk.WithUser(conf.Fabric.User),
 		fabsdk.WithOrg(conf.Fabric.Org),
 	)
-
 	embeddedBackend, err := configBackend()
 	if err != nil {
 		return err
@@ -239,12 +238,12 @@ type GatewayParams struct {
 	mspID         string
 }
 
-func newIdentity(certificatePEM []byte) (*identity.X509Identity, error) {
+func newIdentity(mspId string, certificatePEM []byte) (*identity.X509Identity, error) {
 	cert, err := identity.CertificateFromPEM(certificatePEM)
 	if err != nil {
 		return nil, err
 	}
-	id, err := identity.NewX509Identity("MEDIIOCHAINMSP", cert)
+	id, err := identity.NewX509Identity(mspId, cert)
 	if err != nil {
 		return nil, err
 	}
@@ -286,7 +285,7 @@ func newGrpcConnection(peerEndpoint string, tlsCert []byte) (*grpc.ClientConn, e
 }
 func getGateway(params GatewayParams, clientConnection *grpc.ClientConn) (*client.Gateway, error) {
 
-	id, err := newIdentity([]byte(params.adminCert))
+	id, err := newIdentity(params.mspID, []byte(params.adminCert))
 	if err != nil {
 		return nil, err
 	}

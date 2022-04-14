@@ -24,6 +24,7 @@ type DeployChaincodeInput struct {
 	ChaincodeAddress string          `json:"chaincodeAddress"`
 	SignaturePolicy  string          `json:"signaturePolicy"`
 	Indexes          []*CouchDBIndex `json:"indexes"`
+	Channel          string          `json:"channel"`
 }
 
 type DeployChaincodeResponse struct {
@@ -38,6 +39,7 @@ type DeployChaincodeResponse struct {
 }
 
 type InvokeChaincodeInput struct {
+	Channel       *string              `json:"channel"`
 	ChaincodeName string               `json:"chaincodeName"`
 	Function      string               `json:"function"`
 	Args          []string             `json:"args"`
@@ -56,6 +58,7 @@ type OrgInput struct {
 }
 
 type QueryChaincodeInput struct {
+	Channel       *string              `json:"channel"`
 	ChaincodeName string               `json:"chaincodeName"`
 	Function      string               `json:"function"`
 	Args          []string             `json:"args"`

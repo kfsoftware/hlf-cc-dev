@@ -3,11 +3,11 @@ module github.com/kfsoftware/hlf-cc-dev
 go 1.16
 
 require (
-	github.com/99designs/gqlgen v0.14.0
+	github.com/99designs/gqlgen v0.17.1
 	github.com/VividCortex/gohistogram v1.0.0 // indirect
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/gosimple/slug v1.12.0
-	github.com/hashicorp/yamux v0.0.0-20211028200310-0bc27b27de87
+	github.com/hashicorp/yamux v0.0.0-20211028200310-0bc27b27de87 // indirect
 	github.com/hyperledger/fabric-config v0.1.0
 	github.com/hyperledger/fabric-gateway v1.0.1
 	github.com/hyperledger/fabric-protos-go v0.0.0-20220315113721-7dc293e117f7
@@ -25,7 +25,7 @@ require (
 	github.com/slok/go-http-metrics v0.9.0
 	github.com/spf13/cobra v1.1.3
 	github.com/spf13/viper v1.7.0
-	github.com/vektah/gqlparser/v2 v2.2.0
+	github.com/vektah/gqlparser/v2 v2.4.0
 	google.golang.org/grpc v1.43.0
 	k8s.io/client-go v0.23.1
 )
