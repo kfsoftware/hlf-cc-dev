@@ -6,12 +6,16 @@ import (
 	"github.com/kfsoftware/hlf-cc-dev/gql/models"
 )
 
-func (r *queryResolver) Chaincodes(ctx context.Context) ([]*models.Chaincode, error) {
+func (r *queryResolver) Chaincodes(ctx context.Context, channel *string) ([]*models.Chaincode, error) {
 	resClient, err := resmgmt.New(r.SDKContext)
 	if err != nil {
 		return nil, err
 	}
-	committedCCs, err := resClient.LifecycleQueryCommittedCC(r.Channel, resmgmt.LifecycleQueryCommittedCCRequest{})
+	channelName := r.Channel
+	if channel != nil && *channel != "" {
+		channelName = *channel
+	}
+	committedCCs, err := resClient.LifecycleQueryCommittedCC(channelName, resmgmt.LifecycleQueryCommittedCCRequest{})
 	if err != nil {
 		return nil, err
 	}
@@ -26,12 +30,16 @@ func (r *queryResolver) Chaincodes(ctx context.Context) ([]*models.Chaincode, er
 	return chaincodes, nil
 }
 
-func (r *queryResolver) Chaincode(ctx context.Context, name string) (*models.Chaincode, error) {
+func (r *queryResolver) Chaincode(ctx context.Context, channel *string, name string) (*models.Chaincode, error) {
+	channelName := r.Channel
+	if channel != nil && *channel != "" {
+		channelName = *channel
+	}
 	resClient, err := resmgmt.New(r.SDKContext)
 	if err != nil {
 		return nil, err
 	}
-	committedCCs, err := resClient.LifecycleQueryCommittedCC(r.Channel, resmgmt.LifecycleQueryCommittedCCRequest{
+	committedCCs, err := resClient.LifecycleQueryCommittedCC(channelName, resmgmt.LifecycleQueryCommittedCCRequest{
 		Name: name,
 	})
 	if err != nil {

@@ -74,8 +74,8 @@ type ComplexityRoot struct {
 	}
 
 	Query struct {
-		Chaincode          func(childComplexity int, name string) int
-		Chaincodes         func(childComplexity int) int
+		Chaincode          func(childComplexity int, channel *string, name string) int
+		Chaincodes         func(childComplexity int, channel *string) int
 		__resolve__service func(childComplexity int) int
 	}
 
@@ -101,8 +101,8 @@ type MutationResolver interface {
 	QueryChaincode(ctx context.Context, input models.QueryChaincodeInput) (*models.QueryChaincodeResponse, error)
 }
 type QueryResolver interface {
-	Chaincodes(ctx context.Context) ([]*models.Chaincode, error)
-	Chaincode(ctx context.Context, name string) (*models.Chaincode, error)
+	Chaincodes(ctx context.Context, channel *string) ([]*models.Chaincode, error)
+	Chaincode(ctx context.Context, channel *string, name string) (*models.Chaincode, error)
 }
 
 type executableSchema struct {
@@ -264,14 +264,19 @@ func (e *executableSchema) Complexity(typeName, field string, childComplexity in
 			return 0, false
 		}
 
-		return e.complexity.Query.Chaincode(childComplexity, args["name"].(string)), true
+		return e.complexity.Query.Chaincode(childComplexity, args["channel"].(*string), args["name"].(string)), true
 
 	case "Query.chaincodes":
 		if e.complexity.Query.Chaincodes == nil {
 			break
 		}
 
-		return e.complexity.Query.Chaincodes(childComplexity), true
+		args, err := ec.field_Query_chaincodes_args(context.TODO(), rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.complexity.Query.Chaincodes(childComplexity, args["channel"].(*string)), true
 
 	case "Query._service":
 		if e.complexity.Query.__resolve__service == nil {
@@ -463,8 +468,8 @@ input CouchDBIndex {
 }
 `, BuiltIn: false},
 	{Name: "schema/query.graphql", Input: `type Query {
-    chaincodes: [Chaincode!]
-    chaincode(name: String!): Chaincode
+    chaincodes(channel: String): [Chaincode!]
+    chaincode(channel: String, name: String!): Chaincode
 }
 
 type Chaincode {
@@ -573,15 +578,39 @@ func (ec *executionContext) field_Query___type_args(ctx context.Context, rawArgs
 func (ec *executionContext) field_Query_chaincode_args(ctx context.Context, rawArgs map[string]interface{}) (map[string]interface{}, error) {
 	var err error
 	args := map[string]interface{}{}
-	var arg0 string
-	if tmp, ok := rawArgs["name"]; ok {
-		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("name"))
-		arg0, err = ec.unmarshalNString2string(ctx, tmp)
+	var arg0 *string
+	if tmp, ok := rawArgs["channel"]; ok {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("channel"))
+		arg0, err = ec.unmarshalOString2ᚖstring(ctx, tmp)
 		if err != nil {
 			return nil, err
 		}
 	}
-	args["name"] = arg0
+	args["channel"] = arg0
+	var arg1 string
+	if tmp, ok := rawArgs["name"]; ok {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("name"))
+		arg1, err = ec.unmarshalNString2string(ctx, tmp)
+		if err != nil {
+			return nil, err
+		}
+	}
+	args["name"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_chaincodes_args(ctx context.Context, rawArgs map[string]interface{}) (map[string]interface{}, error) {
+	var err error
+	args := map[string]interface{}{}
+	var arg0 *string
+	if tmp, ok := rawArgs["channel"]; ok {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("channel"))
+		arg0, err = ec.unmarshalOString2ᚖstring(ctx, tmp)
+		if err != nil {
+			return nil, err
+		}
+	}
+	args["channel"] = arg0
 	return args, nil
 }
 
@@ -1255,9 +1284,16 @@ func (ec *executionContext) _Query_chaincodes(ctx context.Context, field graphql
 	}
 
 	ctx = graphql.WithFieldContext(ctx, fc)
+	rawArgs := field.ArgumentMap(ec.Variables)
+	args, err := ec.field_Query_chaincodes_args(ctx, rawArgs)
+	if err != nil {
+		ec.Error(ctx, err)
+		return graphql.Null
+	}
+	fc.Args = args
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
 		ctx = rctx // use context from middleware stack in children
-		return ec.resolvers.Query().Chaincodes(rctx)
+		return ec.resolvers.Query().Chaincodes(rctx, args["channel"].(*string))
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -1296,7 +1332,7 @@ func (ec *executionContext) _Query_chaincode(ctx context.Context, field graphql.
 	fc.Args = args
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (interface{}, error) {
 		ctx = rctx // use context from middleware stack in children
-		return ec.resolvers.Query().Chaincode(rctx, args["name"].(string))
+		return ec.resolvers.Query().Chaincode(rctx, args["channel"].(*string), args["name"].(string))
 	})
 	if err != nil {
 		ec.Error(ctx, err)

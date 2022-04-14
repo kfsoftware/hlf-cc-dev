@@ -10,12 +10,16 @@ import (
 	"encoding/pem"
 	"fmt"
 	"github.com/gosimple/slug"
+	"github.com/hyperledger/fabric-config/configtx"
 	"github.com/hyperledger/fabric-gateway/pkg/client"
 	pb "github.com/hyperledger/fabric-protos-go/peer"
 	clientmsp "github.com/hyperledger/fabric-sdk-go/pkg/client/msp"
 	"github.com/hyperledger/fabric-sdk-go/pkg/client/resmgmt"
+	hlfcontext "github.com/hyperledger/fabric-sdk-go/pkg/common/providers/context"
 	"github.com/hyperledger/fabric-sdk-go/pkg/common/providers/fab"
 	"github.com/hyperledger/fabric-sdk-go/pkg/fab/ccpackager/lifecycle"
+	"github.com/hyperledger/fabric-sdk-go/pkg/fab/resource"
+	"github.com/hyperledger/fabric-sdk-go/pkg/fabsdk"
 	"github.com/hyperledger/fabric-sdk-go/third_party/github.com/hyperledger/fabric/common/policydsl"
 	"github.com/kfsoftware/hlf-cc-dev/gql/models"
 	"github.com/kfsoftware/hlf-cc-dev/log"
@@ -167,6 +171,10 @@ func (f *mspFilter) Accept(peer fab.Peer) bool {
 }
 func (m mutationResolver) DeployChaincode(ctx context.Context, input models.DeployChaincodeInput) (*models.DeployChaincodeResponse, error) {
 	chaincodeName := slug.Make(input.Name)
+	channel := m.Channel
+	if input.Channel != "" {
+		channel = input.Channel
+	}
 	address := input.ChaincodeAddress
 	host, _, err := net.SplitHostPort(address)
 	if err != nil {
@@ -226,6 +234,30 @@ func (m mutationResolver) DeployChaincode(ctx context.Context, input models.Depl
 	if err != nil {
 		return nil, err
 	}
+	block, err := resClient.QueryConfigBlockFromOrderer(channel)
+	if err != nil {
+		return nil, err
+	}
+	cfgBlock, err := resource.ExtractConfigFromBlock(block)
+	if err != nil {
+		return nil, err
+	}
+	cftxGen := configtx.New(cfgBlock)
+	appConf, err := cftxGen.Application().Configuration()
+	if err != nil {
+		return nil, err
+	}
+	mapSdkContext := map[string]hlfcontext.ClientProvider{}
+	for _, organization := range appConf.Organizations {
+		sdk, err := fabsdk.New(m.ConfigBackend)
+		if err != nil {
+			return nil, err
+		}
+		mapSdkContext[organization.Name] = sdk.Context(
+			fabsdk.WithUser(m.User),
+			fabsdk.WithOrg(organization.MSP.Name),
+		)
+	}
 	version := "1"
 	sequence := 1
 
@@ -239,10 +271,7 @@ func (m mutationResolver) DeployChaincode(ctx context.Context, input models.Depl
 	if err != nil {
 		return nil, err
 	}
-	channel := m.Channel
-	if input.Channel != "" {
-		channel = input.Channel
-	}
+
 	committedCCs, err := resClient.LifecycleQueryCommittedCC(channel, resmgmt.LifecycleQueryCommittedCCRequest{Name: chaincodeName})
 	if err != nil {
 		log.Warnf("Error when getting commited chaincodes: %v", err)
@@ -271,8 +300,8 @@ func (m mutationResolver) DeployChaincode(ctx context.Context, input models.Depl
 		InitRequired:      false,
 	}
 	var wg sync.WaitGroup
-	wg.Add(len(m.SDKContextMap))
-	for mspID, sdkContext := range m.SDKContextMap {
+	wg.Add(len(mapSdkContext))
+	for mspID, sdkContext := range mapSdkContext {
 		mspID := mspID
 		sdkContext := sdkContext
 		go func() {

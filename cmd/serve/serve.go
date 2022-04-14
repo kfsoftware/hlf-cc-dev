@@ -215,6 +215,7 @@ func (c *serveCmd) run(conf *serveConfig) error {
 	opts := server.BlockchainServerOpts{
 		Address:        c.address,
 		MetricsAddress: c.metricsAddress,
+		ConfigBackend:  configBackend,
 		SDK:            sdk,
 		GWClient:       gwClient,
 		SDKContext:     sdkContext,

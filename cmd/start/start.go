@@ -60,6 +60,7 @@ type startCmd struct {
 	signaturePolicy       string
 	envFile               string
 	tunnelAddress         string
+	channel               string
 }
 
 func (c startCmd) validate() error {
@@ -131,10 +132,6 @@ hlf-cc-dev listen --forward-to=%s --tunnelAddress="xxx:8082"
 	}
 
 	chaincodeAddress := tunnelCFGItem.SNI
-	//chaincodeAddress, _, err := net.SplitHostPort(fullChaincodeAddress)
-	//if err != nil {
-	//	return errors.Wrapf(err, "failed to parse chaincode address %s", fullChaincodeAddress)
-	//}
 	pdcContents := ""
 	if c.pdcFile != "" {
 		pdcContentsBytes, err := ioutil.ReadFile(c.pdcFile)
@@ -175,6 +172,7 @@ hlf-cc-dev listen --forward-to=%s --tunnelAddress="xxx:8082"
 		}
 	}
 	input := models.DeployChaincodeInput{
+		Channel:          c.channel,
 		Name:             c.chaincode,
 		ChaincodeAddress: chaincodeAddress,
 		Pdc:              pdcContents,
@@ -313,5 +311,6 @@ func NewStartCmd() *cobra.Command {
 	f.StringVar(&c.metaInf, "metaInf", "", "metadata")
 	f.StringVar(&c.signaturePolicy, "signaturePolicy", "", "Signature policy")
 	f.StringVar(&c.envFile, "env-file", "", "Env file to write the environments")
+	f.StringVar(&c.channel, "channel", "", "Channel name")
 	return cmd
 }
