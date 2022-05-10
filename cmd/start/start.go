@@ -172,7 +172,7 @@ hlf-cc-dev listen --forward-to=%s --tunnelAddress="xxx:8082"
 		}
 	}
 	input := models.DeployChaincodeInput{
-		Channel:          c.channel,
+		Channel:          &c.channel,
 		Name:             c.chaincode,
 		ChaincodeAddress: chaincodeAddress,
 		Pdc:              pdcContents,
