@@ -24,7 +24,7 @@ type DeployChaincodeInput struct {
 	ChaincodeAddress string          `json:"chaincodeAddress"`
 	SignaturePolicy  string          `json:"signaturePolicy"`
 	Indexes          []*CouchDBIndex `json:"indexes"`
-	Channel          string          `json:"channel"`
+	Channel          *string         `json:"channel"`
 }
 
 type DeployChaincodeResponse struct {

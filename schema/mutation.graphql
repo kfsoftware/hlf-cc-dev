@@ -67,7 +67,7 @@ input DeployChaincodeInput {
     chaincodeAddress: String!
     signaturePolicy: String!
     indexes: [CouchDBIndex!]
-    channel: String!
+    channel: String
 }
 input CouchDBIndex {
     id: String!

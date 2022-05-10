@@ -460,7 +460,7 @@ input DeployChaincodeInput {
     chaincodeAddress: String!
     signaturePolicy: String!
     indexes: [CouchDBIndex!]
-    channel: String!
+    channel: String
 }
 input CouchDBIndex {
     id: String!
@@ -2960,7 +2960,7 @@ func (ec *executionContext) unmarshalInputDeployChaincodeInput(ctx context.Conte
 			var err error
 
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("channel"))
-			it.Channel, err = ec.unmarshalNString2string(ctx, v)
+			it.Channel, err = ec.unmarshalOString2ᚖstring(ctx, v)
 			if err != nil {
 				return it, err
 			}

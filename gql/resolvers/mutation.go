@@ -172,8 +172,8 @@ func (f *mspFilter) Accept(peer fab.Peer) bool {
 func (m mutationResolver) DeployChaincode(ctx context.Context, input models.DeployChaincodeInput) (*models.DeployChaincodeResponse, error) {
 	chaincodeName := slug.Make(input.Name)
 	channel := m.Channel
-	if input.Channel != "" {
-		channel = input.Channel
+	if input.Channel != nil && *input.Channel != "" {
+		channel = *input.Channel
 	}
 	address := input.ChaincodeAddress
 	host, _, err := net.SplitHostPort(address)
