@@ -20,20 +20,6 @@ builds:
   -
     goos:
       - linux
-    goarch:
-      - amd64
-    env:
-      - CGO_ENABLED=0
-    ldflags:
-      - -s -w -X main.version={{.Tag}}
-    flags:
-      - -trimpath
-  -
-    id: hlf-cc-dev
-    dir: hlf-cc-dev
-    binary: hlf-cc-dev
-    goos:
-      - linux
       - darwin
       - windows
       - freebsd
@@ -46,12 +32,6 @@ builds:
     flags:
       - -trimpath
 
-archives:
-  -
-    id: hlf-cc-dev
-    format: zip
-    allow_different_binary_count: true
-
 dockers:
   -
     # GOOS of the built binary that should be used.
@@ -60,8 +40,8 @@ dockers:
     goarch: amd64
     dockerfile: Dockerfile
     image_templates:
-      - "quay.io/kfsoftware/hlf-cc-dev:{{ .Tag }}"
-      - "quay.io/kfsoftware/hlf-cc-dev:latest"
+      - "ghcr.io/kfsoftware/hlf-cc-dev:{{ .Tag }}"
+      - "ghcr.io/kfsoftware/hlf-cc-dev:latest"
     extra_files:
       - LICENSE
       - README.md

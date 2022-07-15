@@ -7,6 +7,7 @@ type Mutation {
 }
 
 input QueryChaincodeInput {
+    channel: String
     chaincodeName: String!
     function: String!
     args: [String!]
@@ -19,6 +20,7 @@ type QueryChaincodeResponse {
 }
 
 input InvokeChaincodeInput {
+    channel: String
     chaincodeName: String!
     function: String!
     args: [String!]
@@ -61,7 +63,13 @@ type DeployChaincodeResponse {
 }
 input DeployChaincodeInput {
     name: String!
-    tenantId: Int!
     pdc: String!
     chaincodeAddress: String!
+    signaturePolicy: String!
+    indexes: [CouchDBIndex!]
+    channel: String!
+}
+input CouchDBIndex {
+    id: String!
+    contents: String!
 }

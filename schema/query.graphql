@@ -1,5 +1,6 @@
 type Query {
     chaincodes: [Chaincode!]
+    chaincode(name: String!): Chaincode
 }
 
 type Chaincode {

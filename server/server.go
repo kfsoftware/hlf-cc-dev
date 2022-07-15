@@ -7,6 +7,7 @@ import (
 	"github.com/99designs/gqlgen/graphql/handler/lru"
 	"github.com/99designs/gqlgen/graphql/handler/transport"
 	"github.com/99designs/gqlgen/graphql/playground"
+	"github.com/hyperledger/fabric-gateway/pkg/client"
 	clientmsp "github.com/hyperledger/fabric-sdk-go/pkg/client/msp"
 	"github.com/hyperledger/fabric-sdk-go/pkg/common/providers/context"
 	"github.com/hyperledger/fabric-sdk-go/pkg/common/providers/msp"
@@ -33,11 +34,14 @@ type BlockchainServerOpts struct {
 	MetricsAddress string
 	SDK            *fabsdk.FabricSDK
 	SDKContext     context.ClientProvider
-	Channel        string
-	MSPClient      *clientmsp.Client
-	CAConfig       *msp.CAConfig
-	Organization   string
-	User           string
+	SDKContextMap  map[string]context.ClientProvider
+	GWClient       *client.Gateway
+
+	Channel      string
+	MSPClient    *clientmsp.Client
+	CAConfig     *msp.CAConfig
+	Organization string
+	User         string
 }
 
 type BlockchainAPIServer struct {
@@ -71,13 +75,15 @@ func (a *BlockchainAPIServer) setupHttpServer() http.Handler {
 	serverMux := http.NewServeMux()
 	config := gql.Config{
 		Resolvers: &resolvers.Resolver{
-			SDK:          a.SDK,
-			SDKContext:   a.SDKContext,
-			Channel:      a.Channel,
-			MSPClient:    a.MSPClient,
-			CAConfig:     a.CAConfig,
-			Organization: a.Organization,
-			User:         a.User,
+			SDK:           a.SDK,
+			SDKContext:    a.SDKContext,
+			Channel:       a.Channel,
+			MSPClient:     a.MSPClient,
+			CAConfig:      a.CAConfig,
+			SDKContextMap: a.SDKContextMap,
+			Organization:  a.Organization,
+			User:          a.User,
+			GWClient:      a.GWClient,
 		},
 	}
 	es := gql.NewExecutableSchema(config)

@@ -2,22 +2,25 @@ package start
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/x509"
+	"encoding/base64"
+	"encoding/pem"
 	"fmt"
-	"github.com/hashicorp/yamux"
+	"io/ioutil"
+	"os"
+	"path"
+	"path/filepath"
+	"strings"
+
+	"github.com/kfsoftware/hlf-cc-dev/config"
 	"github.com/kfsoftware/hlf-cc-dev/gql/models"
 	"github.com/kfsoftware/hlf-cc-dev/log"
-	"github.com/kfsoftware/getout/pkg/tunnel"
-	"github.com/lithammer/shortuuid/v3"
 	"github.com/pkg/errors"
 	"github.com/shurcooL/graphql"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"io/ioutil"
 	"k8s.io/client-go/util/homedir"
-	"net"
-	"os"
-	"path/filepath"
-	"strings"
 )
 
 type Paths struct {
@@ -48,30 +51,26 @@ const (
 )
 
 type startCmd struct {
-	tenant                    int
-	chaincode                 string
-	localChaincodeAddress     string
-	tunnelAddress             string
-	apiUrl                    string
-	pdcFile                   string
-	accessToken               string
-	metaInf                   string
-	chaincodeAddress          string
-	chaincodeAddressSubdomain string
+	chaincode             string
+	localChaincodeAddress string
+	apiUrl                string
+	pdcFile               string
+	accessToken           string
+	metaInf               string
+	signaturePolicy       string
+	envFile               string
+	tunnelAddress         string
 }
 
 func (c startCmd) validate() error {
-	if c.tenant == 0 {
-		return errors.New("--tenant is required")
+	if c.tunnelAddress == "" {
+		return errors.New("--tunnelAddress is required")
 	}
-	if c.chaincodeAddress == "" && c.chaincodeAddressSubdomain == "" {
-		return errors.New("either --chaincode or --chaincodeAddressSubdomain are required")
+	if c.signaturePolicy == "" {
+		return errors.New("--signaturePolicy is required")
 	}
 	if c.chaincode == "" {
 		return errors.New("--chaincode is required")
-	}
-	if c.tunnelAddress == "" {
-		return errors.New("--tunnelAddress is required")
 	}
 	if c.localChaincodeAddress == "" {
 		return errors.New("--localChaincodeAddress is required")
@@ -95,6 +94,17 @@ func ensureDirs(paths ...string) error {
 	}
 	return nil
 }
+
+func parseECDSAPrivateKey(contents []byte) (*ecdsa.PrivateKey, error) {
+	block, _ := pem.Decode(contents)
+	var ecdsaKey *ecdsa.PrivateKey
+	var err error
+	ecdsaKey, err = x509.ParseECPrivateKey(block.Bytes)
+	if err != nil {
+		return nil, err
+	}
+	return ecdsaKey, nil
+}
 func (c startCmd) run() error {
 	var err error
 	p := mustGetHLFCCPaths()
@@ -102,29 +112,74 @@ func (c startCmd) run() error {
 		p.CertsDir(c.chaincode),
 	)
 	if err != nil {
-		return err
+		log.Errorf("failed to ensure directories: %v", err)
+		return errors.Wrapf(err, "failed to ensure dirs")
 	}
-
 	gqlClient := graphql.NewClient(c.apiUrl, nil)
 	ctx := context.Background()
-	chaincodeAddress := c.chaincodeAddress
-	if c.chaincodeAddressSubdomain != "" {
-		chaincodeAddressPrefix := strings.ToLower(shortuuid.New())
-		chaincodeAddress = fmt.Sprintf("%s.%s", chaincodeAddressPrefix, c.chaincodeAddressSubdomain)
+	tunnelConfig, err := config.NewTunnelConfig()
+	if err != nil {
+		return errors.Wrap(err, "failed to create tunnel config")
 	}
+	tunnelKey := fmt.Sprintf("%s_%s", c.localChaincodeAddress, c.tunnelAddress)
+	log.Debugf("tunnelKey: %s", tunnelKey)
+	tunnelCFGItem, err := tunnelConfig.Get(tunnelKey)
+	if err != nil {
+		return errors.Wrapf(err, `failed to get tunnel config, run the following command
+hlf-cc-dev listen --forward-to=%s --tunnelAddress="xxx:8082"
+`, c.localChaincodeAddress)
+	}
+
+	chaincodeAddress := tunnelCFGItem.SNI
+	//chaincodeAddress, _, err := net.SplitHostPort(fullChaincodeAddress)
+	//if err != nil {
+	//	return errors.Wrapf(err, "failed to parse chaincode address %s", fullChaincodeAddress)
+	//}
 	pdcContents := ""
 	if c.pdcFile != "" {
-		pdcContentsBytes,err := ioutil.ReadFile(c.pdcFile)
+		pdcContentsBytes, err := ioutil.ReadFile(c.pdcFile)
 		if err != nil {
-			return err
+			return errors.Wrapf(err, "failed to read pdc file %q", c.pdcFile)
 		}
 		pdcContents = string(pdcContentsBytes)
 	}
+	var indices []*models.CouchDBIndex
+	if c.metaInf != "" {
+		src := c.metaInf
+		// walk through 3 file in the folder
+		err = filepath.Walk(src, func(file string, fi os.FileInfo, err error) error {
+			// must provide real name
+			// (see https://golang.org/src/archive/tar/common.go?#L626)
+			relname, err := filepath.Rel(src, file)
+			if err != nil {
+				return err
+			}
+			if relname == "." {
+				return nil
+			}
+			if strings.Contains(relname, "statedb/couchdb/indexes") && !fi.IsDir() {
+				contentBytes, err := ioutil.ReadFile(file)
+				if err != nil {
+					return err
+				}
+				index := &models.CouchDBIndex{
+					ID:       path.Base(relname),
+					Contents: string(contentBytes),
+				}
+				indices = append(indices, index)
+			}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+	}
 	input := models.DeployChaincodeInput{
 		Name:             c.chaincode,
-		TenantID:         c.tenant,
 		ChaincodeAddress: chaincodeAddress,
 		Pdc:              pdcContents,
+		SignaturePolicy:  c.signaturePolicy,
+		Indexes:          indices,
 	}
 	var m struct {
 		DeployChaincode struct {
@@ -145,8 +200,16 @@ func (c startCmd) run() error {
 	if err != nil {
 		return err
 	}
+	pk, err := parseECDSAPrivateKey([]byte(m.DeployChaincode.PrivateKey))
+	if err != nil {
+		return err
+	}
+	pkBytes, err := EncodePrivateKey(pk)
+	if err != nil {
+		return err
+	}
 	chaincodeKeyPath := filepath.Join(p.CertsDir(c.chaincode), "chaincode.key")
-	err = ioutil.WriteFile(chaincodeKeyPath, []byte(m.DeployChaincode.PrivateKey), 0777)
+	err = ioutil.WriteFile(chaincodeKeyPath, pkBytes, 0777)
 	if err != nil {
 		return err
 	}
@@ -160,56 +223,63 @@ func (c startCmd) run() error {
 	if err != nil {
 		return err
 	}
+
+	chaincodeKeyB64Path := filepath.Join(p.CertsDir(c.chaincode), "chaincode_b64.key")
+	err = ioutil.WriteFile(chaincodeKeyB64Path, []byte(base64.StdEncoding.EncodeToString(pkBytes)), 0777)
+	if err != nil {
+		return err
+	}
+	chaincodeCertB64Path := filepath.Join(p.CertsDir(c.chaincode), "chaincode_b64.pem")
+	err = ioutil.WriteFile(chaincodeCertB64Path, []byte(base64.StdEncoding.EncodeToString([]byte(m.DeployChaincode.Certificate))), 0777)
+	if err != nil {
+		return err
+	}
 	dotEnvFile := fmt.Sprintf(`
-export CORE_CHAINCODE_ID_NAME=%s
-export CORE_CHAINCODE_ADDRESS=%s
-export CORE_CHAINCODE_KEY_FILE=%s
-export CORE_CHAINCODE_CERT_FILE=%s
-export CORE_CHAINCODE_CA_FILE=%s
-`, m.DeployChaincode.PackageID, c.localChaincodeAddress, chaincodeKeyPath, chaincodeCertPath, caCertPath)
+CORE_CHAINCODE_ID=%s
+CORE_CHAINCODE_ID_NAME=%s
+CORE_CHAINCODE_ADDRESS=%s
+CORE_CHAINCODE_TLS_KEY_FILE=%s
+CORE_CHAINCODE_TLS_CERT_FILE=%s
+CORE_CHAINCODE_TLS_CLIENT_CACERT_FILE=%s
+CHAINCODE_TLS_DISABLED=false
+CORE_PEER_TLS_ROOTCERT_FILE=%s
+CORE_TLS_CLIENT_KEY_FILE=%s
+CORE_TLS_CLIENT_CERT_FILE=%s
+`,
+		m.DeployChaincode.PackageID,
+		m.DeployChaincode.PackageID,
+		c.localChaincodeAddress,
+		chaincodeKeyPath,
+		chaincodeCertPath,
+		caCertPath,
+		caCertPath,
+		chaincodeKeyB64Path,
+		chaincodeCertB64Path,
+	)
 	dotEnvPath := filepath.Join(p.CertsDir(c.chaincode), ".env")
 	err = ioutil.WriteFile(dotEnvPath, []byte(dotEnvFile), 0777)
 	if err != nil {
 		return err
 	}
-	sni, _, err := net.SplitHostPort(chaincodeAddress)
-	if err != nil {
-		return err
+	if c.envFile != "" {
+		err = ioutil.WriteFile(c.envFile, []byte(dotEnvFile), 0777)
+		if err != nil {
+			return err
+		}
 	}
 	log.Infof("Channel: %s Chaincode: %s", m.DeployChaincode.ChaincodeName, m.DeployChaincode.ChannelName)
-	log.Infof("starting tunnel from %s to %s", c.localChaincodeAddress, chaincodeAddress)
-	err = startTunnel(
-		c.tunnelAddress,
-		c.localChaincodeAddress,
-		sni,
-	)
-	if err != nil {
-		return err
-	}
 	return err
 }
-func startTunnel(tunnelAddr string, localAddress string, sni string) error {
-	conn, err := net.Dial("tcp", tunnelAddr)
+func EncodePrivateKey(key interface{}) ([]byte, error) {
+	signEncodedPK, err := x509.MarshalPKCS8PrivateKey(key)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
-	session, err := yamux.Client(conn, nil)
-	if err != nil {
-		panic(err)
-	}
-	tunnelCli := tunnel.NewTunnelClient(
-		session,
-		localAddress,
-	)
-	err = tunnelCli.StartTlsTunnel(sni)
-	if err != nil {
-		return err
-	}
-	err = tunnelCli.Start()
-	if err != nil {
-		return err
-	}
-	return nil
+	pemPk := pem.EncodeToMemory(&pem.Block{
+		Type:  "PRIVATE KEY",
+		Bytes: signEncodedPK,
+	})
+	return pemPk, nil
 }
 
 func NewStartCmd() *cobra.Command {
@@ -234,15 +304,14 @@ func NewStartCmd() *cobra.Command {
 		},
 	}
 	f := cmd.Flags()
-	f.StringVar(&c.chaincodeAddress, "chaincodeAddress", "", "chaincode address to be accessed by the peer(needs to be publicly accessible)")
-	f.StringVar(&c.chaincodeAddressSubdomain, "chaincodeAddressSubdomain", "", "subdomain to be used for chaincode address, in this case, the address is generated automatically <guid>.<chaincodeAddressSubdomain>")
-	f.IntVar(&c.tenant, "tenant", 0, "tenant id")
 	f.StringVar(&c.chaincode, "chaincode", "", "chaincode name within the channel")
 	f.StringVar(&c.localChaincodeAddress, "localChaincode", "", "address of the local chaincode server, example: localhost:9999")
+	f.StringVar(&c.tunnelAddress, "tunnelAddress", "", "remote tunnel address, example: localhost:9999")
 	f.StringVar(&c.apiUrl, "apiUrl", "", "apiUrl to interact with the peers")
 	f.StringVar(&c.pdcFile, "pdc", "", "pdc file json, see examples/pdc.json")
-	f.StringVar(&c.tunnelAddress, "tunnelAddress", "", "address of the local chaincode server, example: localhost:9999")
 	f.StringVar(&c.accessToken, "accessToken", "", "access token")
 	f.StringVar(&c.metaInf, "metaInf", "", "metadata")
+	f.StringVar(&c.signaturePolicy, "signaturePolicy", "", "Signature policy")
+	f.StringVar(&c.envFile, "env-file", "", "Env file to write the environments")
 	return cmd
 }

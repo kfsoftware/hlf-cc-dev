@@ -3,9 +3,13 @@ package cmd
 import (
 	"fmt"
 	"github.com/kfsoftware/hlf-cc-dev/cmd/bootstrap"
+	"github.com/kfsoftware/hlf-cc-dev/cmd/listen"
 	"github.com/kfsoftware/hlf-cc-dev/cmd/serve"
 	"github.com/kfsoftware/hlf-cc-dev/cmd/start"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"os"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -36,11 +40,15 @@ func Execute() {
 }
 
 func init() {
+	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
+	output := zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339}
+	log.Logger = zerolog.New(output).With().Timestamp().Logger().Level(zerolog.InfoLevel)
 	cobra.OnInitialize()
 	rootCmd.AddCommand(
 		start.NewStartCmd(),
 		serve.NewServeCmd(),
 		bootstrap.NewInitCmd(),
+		listen.NewListenCmd(),
 		//server.NewServeCmd(),
 		//dev.NewDevCmd(),
 		//ci.NewCICmd(),

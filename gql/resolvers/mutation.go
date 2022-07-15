@@ -10,24 +10,21 @@ import (
 	"encoding/pem"
 	"fmt"
 	"github.com/gosimple/slug"
-	"github.com/hyperledger/fabric-config/configtx/membership"
+	"github.com/hyperledger/fabric-gateway/pkg/client"
 	pb "github.com/hyperledger/fabric-protos-go/peer"
-	"github.com/hyperledger/fabric-sdk-go/pkg/client/channel"
 	clientmsp "github.com/hyperledger/fabric-sdk-go/pkg/client/msp"
 	"github.com/hyperledger/fabric-sdk-go/pkg/client/resmgmt"
 	"github.com/hyperledger/fabric-sdk-go/pkg/common/providers/fab"
 	"github.com/hyperledger/fabric-sdk-go/pkg/fab/ccpackager/lifecycle"
-	"github.com/hyperledger/fabric-sdk-go/pkg/fabsdk"
 	"github.com/hyperledger/fabric-sdk-go/third_party/github.com/hyperledger/fabric/common/policydsl"
-	"github.com/kfsoftware/hlf-cc-dev/ent"
 	"github.com/kfsoftware/hlf-cc-dev/gql/models"
 	"github.com/kfsoftware/hlf-cc-dev/log"
 	"github.com/lithammer/shortuuid/v3"
 	"github.com/pkg/errors"
 	"io"
 	"net"
-	"os"
-	"path/filepath"
+	"strings"
+	"sync"
 	"time"
 )
 
@@ -35,7 +32,7 @@ func getChaincodePackage(label string, codeTarGz []byte) ([]byte, error) {
 	var err error
 	metadataJson := fmt.Sprintf(`
 {
-  "type": "external",
+  "type": "ccaas",
   "label": "%s"
 }
 `, label)
@@ -44,9 +41,19 @@ func getChaincodePackage(label string, codeTarGz []byte) ([]byte, error) {
 
 	// set up the gzip writer
 	gw := gzip.NewWriter(buf)
-	defer gw.Close()
+	defer func(gw *gzip.Writer) {
+		err := gw.Close()
+		if err != nil {
+			log.Warnf("gzip.Writer.Close() failed: %s", err)
+		}
+	}(gw)
 	tw := tar.NewWriter(gw)
-	defer tw.Close()
+	defer func(tw *tar.Writer) {
+		err := tw.Close()
+		if err != nil {
+			log.Warnf("tar.Writer.Close() failed: %s", err)
+		}
+	}(tw)
 	header := new(tar.Header)
 	header.Name = "metadata.json"
 	metadataJsonBytes := []byte(metadataJson)
@@ -61,7 +68,6 @@ func getChaincodePackage(label string, codeTarGz []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	headerCode := new(tar.Header)
 	headerCode.Name = "code.tar.gz"
 	headerCode.Size = int64(len(codeTarGz))
@@ -75,12 +81,19 @@ func getChaincodePackage(label string, codeTarGz []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	tw.Close()
-	gw.Close()
+	err = tw.Close()
+	if err != nil {
+		return nil, err
+	}
+	err = gw.Close()
+	if err != nil {
+		log.Warnf("gzip.Writer.Close() failed: %s", err)
+		return nil, err
+	}
 	return buf.Bytes(), nil
 }
 
-func getCodeTarGz(address string, rootCert string, clientKey string, clientCert string, metaInfPath string) ([]byte, error) {
+func getCodeTarGz(address string, rootCert string, clientKey string, clientCert string, couchDBIndices []*models.CouchDBIndex) ([]byte, error) {
 	var err error
 	connMap := map[string]interface{}{
 		"address":              address,
@@ -95,13 +108,11 @@ func getCodeTarGz(address string, rootCert string, clientKey string, clientCert 
 	if err != nil {
 		return nil, err
 	}
-	log.Infof("Conn=%s", string(connJsonBytes))
+	log.Debugf("Conn=%s", string(connJsonBytes))
 	// set up the output file
 	buf := &bytes.Buffer{}
-
 	// set up the gzip writer
 	gw := gzip.NewWriter(buf)
-
 	tw := tar.NewWriter(gw)
 	header := new(tar.Header)
 	header.Name = "connection.json"
@@ -116,53 +127,44 @@ func getCodeTarGz(address string, rootCert string, clientKey string, clientCert 
 	if err != nil {
 		return nil, err
 	}
-	if metaInfPath != "" {
-		src := metaInfPath
-		// walk through 3 file in the folder
-		err = filepath.Walk(src, func(file string, fi os.FileInfo, err error) error {
-			// generate tar header
-			header, err := tar.FileInfoHeader(fi, file)
-			if err != nil {
-				return err
-			}
-
-			// must provide real name
-			// (see https://golang.org/src/archive/tar/common.go?#L626)
-			relname, err := filepath.Rel(src, file)
-			if err != nil {
-				return err
-			}
-			if relname == "." {
-				return nil
-			}
-			header.Name = "META-INF/" + filepath.ToSlash(relname)
-
+	if len(couchDBIndices) > 0 {
+		for _, couchDBIndex := range couchDBIndices {
+			header := new(tar.Header)
+			contentsBytes := []byte(couchDBIndex.Contents)
+			header.Mode = 0755
+			header.Size = int64(len(contentsBytes))
+			header.Name = "META-INF/statedb/couchdb/indexes/" + couchDBIndex.ID
 			// write header
 			if err := tw.WriteHeader(header); err != nil {
-				return err
+				return nil, err
 			}
 			// if not a dir, write file content
-			if !fi.IsDir() {
-				data, err := os.Open(file)
-				if err != nil {
-					return err
-				}
-				if _, err := io.Copy(tw, data); err != nil {
-					return err
-				}
+			r := bytes.NewReader(contentsBytes)
+			if _, err := io.Copy(tw, r); err != nil {
+				return nil, err
 			}
-			return nil
-		})
-		if err != nil {
-			return nil, err
 		}
-	}
 
-	tw.Close()
-	gw.Close()
+	}
+	err = tw.Close()
+	if err != nil {
+		return nil, err
+	}
+	err = gw.Close()
+	if err != nil {
+		return nil, err
+	}
 	return buf.Bytes(), nil
 }
 
+type mspFilter struct {
+	mspID string
+}
+
+// Accept returns true if this peer is to be included in the target list
+func (f *mspFilter) Accept(peer fab.Peer) bool {
+	return peer.MSPID() == f.mspID
+}
 func (m mutationResolver) DeployChaincode(ctx context.Context, input models.DeployChaincodeInput) (*models.DeployChaincodeResponse, error) {
 	chaincodeName := slug.Make(input.Name)
 	address := input.ChaincodeAddress
@@ -179,7 +181,7 @@ func (m mutationResolver) DeployChaincode(ctx context.Context, input models.Depl
 		CAName:         m.CAConfig.CAName,
 		Secret:         secret,
 	})
-	if err != nil {
+	if err != nil && !strings.Contains(err.Error(), "is already registered") {
 		return nil, err
 	}
 	err = m.MSPClient.Enroll(
@@ -218,7 +220,7 @@ func (m mutationResolver) DeployChaincode(ctx context.Context, input models.Depl
 		rootCrt,
 		privateKey,
 		certificate,
-		"",
+		input.Indexes,
 	)
 	resClient, err := resmgmt.New(m.SDKContext)
 	if err != nil {
@@ -226,28 +228,22 @@ func (m mutationResolver) DeployChaincode(ctx context.Context, input models.Depl
 	}
 	version := "1"
 	sequence := 1
+
 	pkg, err := getChaincodePackage(chaincodeName, codeTarBytes)
 	if err != nil {
 		return nil, err
 	}
-	_, err = resClient.LifecycleInstallCC(
-		resmgmt.LifecycleInstallCCRequest{
-			Label:   input.Name,
-			Package: pkg,
-		},
-		resmgmt.WithTimeout(fab.ResMgmt, 2*time.Minute),
-		resmgmt.WithTimeout(fab.PeerResponse, 2*time.Minute),
-	)
-	if err != nil {
-		return nil, err
-	}
 	packageID := lifecycle.ComputePackageID(chaincodeName, pkg)
-	signaturePolicy := fmt.Sprintf("OR('%s.member')", m.Organization)
+	signaturePolicy := input.SignaturePolicy
 	sp, err := policydsl.FromString(signaturePolicy)
 	if err != nil {
 		return nil, err
 	}
-	committedCCs, err := resClient.LifecycleQueryCommittedCC(m.Channel, resmgmt.LifecycleQueryCommittedCCRequest{Name: chaincodeName})
+	channel := m.Channel
+	if input.Channel != "" {
+		channel = input.Channel
+	}
+	committedCCs, err := resClient.LifecycleQueryCommittedCC(channel, resmgmt.LifecycleQueryCommittedCCRequest{Name: chaincodeName})
 	if err != nil {
 		log.Warnf("Error when getting commited chaincodes: %v", err)
 	}
@@ -263,27 +259,55 @@ func (m mutationResolver) DeployChaincode(ctx context.Context, input models.Depl
 		}
 	}
 	log.Debugf("collections=%v", collections)
-	txID, err := resClient.LifecycleApproveCC(
-		m.Channel,
-		resmgmt.LifecycleApproveCCRequest{
-			Name:              chaincodeName,
-			Version:           version,
-			PackageID:         packageID,
-			Sequence:          int64(sequence),
-			EndorsementPlugin: "escc",
-			ValidationPlugin:  "vscc",
-			SignaturePolicy:   sp,
-			CollectionConfig:  collections,
-			InitRequired:      false,
-		},
-		resmgmt.WithTimeout(fab.ResMgmt, 2*time.Minute),
-		resmgmt.WithTimeout(fab.PeerResponse, 2*time.Minute),
-	)
-	if err != nil {
-		return nil, err
+	approveCCRequest := resmgmt.LifecycleApproveCCRequest{
+		Name:              chaincodeName,
+		Version:           version,
+		PackageID:         packageID,
+		Sequence:          int64(sequence),
+		EndorsementPlugin: "escc",
+		ValidationPlugin:  "vscc",
+		SignaturePolicy:   sp,
+		CollectionConfig:  collections,
+		InitRequired:      false,
 	}
-	log.Infof("Chaincode %s approved= %s", chaincodeName, txID)
-	commitReadiness , err := resClient.LifecycleCheckCCCommitReadiness(m.Channel,
+	var wg sync.WaitGroup
+	wg.Add(len(m.SDKContextMap))
+	for mspID, sdkContext := range m.SDKContextMap {
+		mspID := mspID
+		sdkContext := sdkContext
+		go func() {
+			defer wg.Done()
+			resClient, err := resmgmt.New(sdkContext)
+			if err != nil {
+				log.Errorf("Error when creating resmgmt client: %v", err)
+				return
+			}
+			_, err = resClient.LifecycleInstallCC(
+				resmgmt.LifecycleInstallCCRequest{
+					Label:   input.Name,
+					Package: pkg,
+				},
+				resmgmt.WithTimeout(fab.ResMgmt, 2*time.Minute),
+				resmgmt.WithTimeout(fab.PeerResponse, 2*time.Minute),
+			)
+			if err != nil {
+				log.Errorf("Error when installing chaincode: %v", err)
+				return
+			}
+			txID, err := resClient.LifecycleApproveCC(
+				channel,
+				approveCCRequest,
+				resmgmt.WithTargetFilter(&mspFilter{mspID: mspID}),
+			)
+			if err != nil && !strings.Contains(err.Error(), "redefine uncommitted") {
+				log.Errorf("Error when approving chaincode: %v", err)
+				return
+			}
+			log.Infof("%s Chaincode %s approved= %s", mspID, chaincodeName, txID)
+		}()
+	}
+	wg.Wait()
+	commitReadiness, err := resClient.LifecycleCheckCCCommitReadiness(channel,
 		resmgmt.LifecycleCheckCCCommitReadinessRequest{
 			Name:              chaincodeName,
 			Version:           version,
@@ -298,8 +322,8 @@ func (m mutationResolver) DeployChaincode(ctx context.Context, input models.Depl
 		return nil, err
 	}
 	log.Infof("Chaincode %s readiness= %v", chaincodeName, commitReadiness)
-	txID, err = resClient.LifecycleCommitCC(
-		m.Channel,
+	txID, err := resClient.LifecycleCommitCC(
+		channel,
 		resmgmt.LifecycleCommitCCRequest{
 			Name:              chaincodeName,
 			Version:           version,
@@ -318,7 +342,7 @@ func (m mutationResolver) DeployChaincode(ctx context.Context, input models.Depl
 	}
 	log.Infof("Chaincode %s committed= %s", chaincodeName, txID)
 	return &models.DeployChaincodeResponse{
-		ChannelName:     m.Channel,
+		ChannelName:     channel,
 		PackageID:       packageID,
 		Version:         version,
 		Sequence:        sequence,
@@ -350,54 +374,15 @@ func ParseX509Certificate(contents []byte) (*x509.Certificate, error) {
 	return crt, nil
 }
 
-func mapNodeOUs(tenant *ent.Tenant) (membership.NodeOUs, error) {
-	clientCert, err := ParseX509Certificate(tenant.SignCertCACert)
-	if err != nil {
-		return membership.NodeOUs{}, nil
-	}
-	peerCert, err := ParseX509Certificate(tenant.SignCertCACert)
-	if err != nil {
-		return membership.NodeOUs{}, nil
-	}
-	adminCert, err := ParseX509Certificate(tenant.SignCertCACert)
-	if err != nil {
-		return membership.NodeOUs{}, nil
-	}
-	ordererCert, err := ParseX509Certificate(tenant.SignCertCACert)
-	if err != nil {
-		return membership.NodeOUs{}, nil
-	}
-	nodeOUs := membership.NodeOUs{
-		Enable: true,
-		ClientOUIdentifier: membership.OUIdentifier{
-			Certificate:                  clientCert,
-			OrganizationalUnitIdentifier: "client",
-		},
-		PeerOUIdentifier: membership.OUIdentifier{
-			Certificate:                  peerCert,
-			OrganizationalUnitIdentifier: "peer",
-		},
-		AdminOUIdentifier: membership.OUIdentifier{
-			Certificate:                  adminCert,
-			OrganizationalUnitIdentifier: "admin",
-		},
-		OrdererOUIdentifier: membership.OUIdentifier{
-			Certificate:                  ordererCert,
-			OrganizationalUnitIdentifier: "orderer",
-		},
-	}
-	return nodeOUs, nil
-}
-
 func (m mutationResolver) InvokeChaincode(ctx context.Context, input models.InvokeChaincodeInput) (*models.InvokeChaincodeResponse, error) {
-	chContext := m.SDK.ChannelContext(
-		m.Channel,
-		fabsdk.WithOrg(m.Organization),
-		fabsdk.WithUser(m.User),
-	)
-	chClient, err := channel.New(chContext)
-	if err != nil {
-		return nil, err
+	ch := m.Channel
+	if input.Channel != nil && *input.Channel != "" {
+		ch = *input.Channel
+	}
+	network := m.GWClient.GetNetwork(ch)
+	contract := network.GetContract(input.ChaincodeName)
+	if contract == nil {
+		return nil, errors.Errorf("chaincode %s not found", input.ChaincodeName)
 	}
 	var byteArgs [][]byte
 	for _, arg := range input.Args {
@@ -408,23 +393,22 @@ func (m mutationResolver) InvokeChaincode(ctx context.Context, input models.Invo
 	for _, transient := range input.TransientMap {
 		transientMap[transient.Key] = []byte(transient.Value)
 	}
-	execReponse, err := chClient.Execute(
-		channel.Request{
-			ChaincodeID:     input.ChaincodeName,
-			Fcn:             input.Function,
-			Args:            byteArgs,
-			TransientMap:    transientMap,
-			InvocationChain: []*fab.ChaincodeCall{},
-			IsInit:          false,
-		},
+	result, commit, err := contract.SubmitAsync(
+		input.Function,
+		client.WithBytesArguments(byteArgs...),
+		client.WithTransient(transientMap),
 	)
 	if err != nil {
 		return nil, err
 	}
+	status, err := commit.Status()
+	if err != nil {
+		return nil, err
+	}
 	return &models.InvokeChaincodeResponse{
-		Response:        string(execReponse.Payload),
-		ChaincodeStatus: int(execReponse.ChaincodeStatus),
-		TransactionID:   string(execReponse.TransactionID),
+		Response:        string(result),
+		ChaincodeStatus: int(status.Code),
+		TransactionID:   status.TransactionID,
 	}, nil
 }
 
@@ -544,14 +528,14 @@ type collectionConfigJson struct {
 }
 
 func (m mutationResolver) QueryChaincode(ctx context.Context, input models.QueryChaincodeInput) (*models.QueryChaincodeResponse, error) {
-	chContext := m.SDK.ChannelContext(
-		m.Channel,
-		fabsdk.WithOrg(m.Organization),
-		fabsdk.WithUser(m.User),
-	)
-	chClient, err := channel.New(chContext)
-	if err != nil {
-		return nil, err
+	ch := m.Channel
+	if input.Channel != nil && *input.Channel != "" {
+		ch = *input.Channel
+	}
+	network := m.GWClient.GetNetwork(ch)
+	contract := network.GetContract(input.ChaincodeName)
+	if contract == nil {
+		return nil, errors.Errorf("chaincode %s not found", input.ChaincodeName)
 	}
 	var byteArgs [][]byte
 	for _, arg := range input.Args {
@@ -561,21 +545,16 @@ func (m mutationResolver) QueryChaincode(ctx context.Context, input models.Query
 	for _, transient := range input.TransientMap {
 		transientMap[transient.Key] = []byte(transient.Value)
 	}
-	execReponse, err := chClient.Query(
-		channel.Request{
-			ChaincodeID:     input.ChaincodeName,
-			Fcn:             input.Function,
-			Args:            byteArgs,
-			TransientMap:    transientMap,
-			InvocationChain: []*fab.ChaincodeCall{},
-			IsInit:          false,
-		},
+	response, err := contract.Evaluate(
+		input.Function,
+		client.WithBytesArguments(byteArgs...),
+		client.WithTransient(transientMap),
 	)
 	if err != nil {
 		return nil, err
 	}
 	return &models.QueryChaincodeResponse{
-		Response:        string(execReponse.Payload),
-		ChaincodeStatus: int(execReponse.ChaincodeStatus),
+		Response:        string(response),
+		ChaincodeStatus: int(10),
 	}, nil
 }
