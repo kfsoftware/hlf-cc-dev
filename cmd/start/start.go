@@ -157,7 +157,7 @@ hlf-cc-dev listen --forward-to=%s --tunnelAddress="xxx:8082"
 			if relname == "." {
 				return nil
 			}
-			if strings.Contains(relname, "statedb/couchdb/indexes") && !fi.IsDir() {
+			if (strings.Contains(relname, "statedb/couchdb/indexes") || strings.Contains(relname, "statedb/couchdb/collections")) && !fi.IsDir() {
 				contentBytes, err := ioutil.ReadFile(file)
 				if err != nil {
 					return err
