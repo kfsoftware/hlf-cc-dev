@@ -141,6 +141,7 @@ hlf-cc-dev listen --forward-to=%s --tunnelAddress="xxx:8082"
 		pdcContents = string(pdcContentsBytes)
 	}
 	var indices []*models.CouchDBIndex
+	var pdcIndices []*models.CouchDBIndexPdc
 	if c.metaInf != "" {
 		src := c.metaInf
 		// walk through 3 file in the folder
@@ -164,6 +165,21 @@ hlf-cc-dev listen --forward-to=%s --tunnelAddress="xxx:8082"
 					Contents: string(contentBytes),
 				}
 				indices = append(indices, index)
+				log.Infof("found index file: %s - %s", relname, path.Base(relname))
+			}
+			if strings.Contains(relname, "statedb/couchdb/collections") && !fi.IsDir() {
+				contentBytes, err := ioutil.ReadFile(file)
+				if err != nil {
+					return err
+				}
+				pdcName := path.Base(path.Join(relname, "../../"))
+				index := &models.CouchDBIndexPdc{
+					ID:       path.Base(relname),
+					PdcName:  pdcName,
+					Contents: string(contentBytes),
+				}
+				pdcIndices = append(pdcIndices, index)
+				log.Infof("found index for PDC %s file: %s - %s", pdcName, relname, path.Base(relname))
 			}
 			return nil
 		})
@@ -171,6 +187,8 @@ hlf-cc-dev listen --forward-to=%s --tunnelAddress="xxx:8082"
 			return err
 		}
 	}
+	log.Infof("found %d indexes %v", len(indices), indices)
+	log.Infof("found %d pdc indexes %v", len(pdcIndices), pdcIndices)
 	input := models.DeployChaincodeInput{
 		Channel:          &c.channel,
 		Name:             c.chaincode,
@@ -178,6 +196,7 @@ hlf-cc-dev listen --forward-to=%s --tunnelAddress="xxx:8082"
 		Pdc:              pdcContents,
 		SignaturePolicy:  c.signaturePolicy,
 		Indexes:          indices,
+		PdcIndexes:       pdcIndices,
 	}
 	var m struct {
 		DeployChaincode struct {

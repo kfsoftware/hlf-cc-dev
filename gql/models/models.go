@@ -13,18 +13,25 @@ type CouchDBIndex struct {
 	Contents string `json:"contents"`
 }
 
+type CouchDBIndexPdc struct {
+	ID       string `json:"id"`
+	PdcName  string `json:"pdcName"`
+	Contents string `json:"contents"`
+}
+
 type CreateTenantInput struct {
 	Name string      `json:"name"`
 	Orgs []*OrgInput `json:"orgs"`
 }
 
 type DeployChaincodeInput struct {
-	Name             string          `json:"name"`
-	Pdc              string          `json:"pdc"`
-	ChaincodeAddress string          `json:"chaincodeAddress"`
-	SignaturePolicy  string          `json:"signaturePolicy"`
-	Indexes          []*CouchDBIndex `json:"indexes"`
-	Channel          *string         `json:"channel"`
+	Name             string             `json:"name"`
+	Pdc              string             `json:"pdc"`
+	ChaincodeAddress string             `json:"chaincodeAddress"`
+	SignaturePolicy  string             `json:"signaturePolicy"`
+	Indexes          []*CouchDBIndex    `json:"indexes"`
+	PdcIndexes       []*CouchDBIndexPdc `json:"pdcIndexes"`
+	Channel          *string            `json:"channel"`
 }
 
 type DeployChaincodeResponse struct {

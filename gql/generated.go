@@ -460,10 +460,17 @@ input DeployChaincodeInput {
     chaincodeAddress: String!
     signaturePolicy: String!
     indexes: [CouchDBIndex!]
+    pdcIndexes: [CouchDBIndexPDC!]
     channel: String
 }
 input CouchDBIndex {
     id: String!
+    contents: String!
+}
+
+input CouchDBIndexPDC {
+    id: String!
+    pdcName: String!
     contents: String!
 }
 `, BuiltIn: false},
@@ -2876,6 +2883,45 @@ func (ec *executionContext) unmarshalInputCouchDBIndex(ctx context.Context, obj 
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputCouchDBIndexPDC(ctx context.Context, obj interface{}) (models.CouchDBIndexPdc, error) {
+	var it models.CouchDBIndexPdc
+	asMap := map[string]interface{}{}
+	for k, v := range obj.(map[string]interface{}) {
+		asMap[k] = v
+	}
+
+	for k, v := range asMap {
+		switch k {
+		case "id":
+			var err error
+
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("id"))
+			it.ID, err = ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+		case "pdcName":
+			var err error
+
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("pdcName"))
+			it.PdcName, err = ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+		case "contents":
+			var err error
+
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("contents"))
+			it.Contents, err = ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+		}
+	}
+
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputCreateTenantInput(ctx context.Context, obj interface{}) (models.CreateTenantInput, error) {
 	var it models.CreateTenantInput
 	asMap := map[string]interface{}{}
@@ -2953,6 +2999,14 @@ func (ec *executionContext) unmarshalInputDeployChaincodeInput(ctx context.Conte
 
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("indexes"))
 			it.Indexes, err = ec.unmarshalOCouchDBIndex2ᚕᚖgithubᚗcomᚋkfsoftwareᚋhlfᚑccᚑdevᚋgqlᚋmodelsᚐCouchDBIndexᚄ(ctx, v)
+			if err != nil {
+				return it, err
+			}
+		case "pdcIndexes":
+			var err error
+
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("pdcIndexes"))
+			it.PdcIndexes, err = ec.unmarshalOCouchDBIndexPDC2ᚕᚖgithubᚗcomᚋkfsoftwareᚋhlfᚑccᚑdevᚋgqlᚋmodelsᚐCouchDBIndexPdcᚄ(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -4093,6 +4147,11 @@ func (ec *executionContext) unmarshalNCouchDBIndex2ᚖgithubᚗcomᚋkfsoftware�
 	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
+func (ec *executionContext) unmarshalNCouchDBIndexPDC2ᚖgithubᚗcomᚋkfsoftwareᚋhlfᚑccᚑdevᚋgqlᚋmodelsᚐCouchDBIndexPdc(ctx context.Context, v interface{}) (*models.CouchDBIndexPdc, error) {
+	res, err := ec.unmarshalInputCouchDBIndexPDC(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
 func (ec *executionContext) unmarshalNDeployChaincodeInput2githubᚗcomᚋkfsoftwareᚋhlfᚑccᚑdevᚋgqlᚋmodelsᚐDeployChaincodeInput(ctx context.Context, v interface{}) (models.DeployChaincodeInput, error) {
 	res, err := ec.unmarshalInputDeployChaincodeInput(ctx, v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -4555,6 +4614,26 @@ func (ec *executionContext) unmarshalOCouchDBIndex2ᚕᚖgithubᚗcomᚋkfsoftwa
 	for i := range vSlice {
 		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
 		res[i], err = ec.unmarshalNCouchDBIndex2ᚖgithubᚗcomᚋkfsoftwareᚋhlfᚑccᚑdevᚋgqlᚋmodelsᚐCouchDBIndex(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) unmarshalOCouchDBIndexPDC2ᚕᚖgithubᚗcomᚋkfsoftwareᚋhlfᚑccᚑdevᚋgqlᚋmodelsᚐCouchDBIndexPdcᚄ(ctx context.Context, v interface{}) ([]*models.CouchDBIndexPdc, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var vSlice []interface{}
+	if v != nil {
+		vSlice = graphql.CoerceList(v)
+	}
+	var err error
+	res := make([]*models.CouchDBIndexPdc, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNCouchDBIndexPDC2ᚖgithubᚗcomᚋkfsoftwareᚋhlfᚑccᚑdevᚋgqlᚋmodelsᚐCouchDBIndexPdc(ctx, vSlice[i])
 		if err != nil {
 			return nil, err
 		}

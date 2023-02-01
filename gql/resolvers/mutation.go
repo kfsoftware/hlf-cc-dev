@@ -26,6 +26,7 @@ import (
 	"github.com/lithammer/shortuuid/v3"
 	"github.com/pkg/errors"
 	"io"
+	"io/ioutil"
 	"net"
 	"strings"
 	"sync"
@@ -97,7 +98,14 @@ func getChaincodePackage(label string, codeTarGz []byte) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func getCodeTarGz(address string, rootCert string, clientKey string, clientCert string, couchDBIndices []*models.CouchDBIndex) ([]byte, error) {
+func getCodeTarGz(
+	address string,
+	rootCert string,
+	clientKey string,
+	clientCert string,
+	couchDBIndices []*models.CouchDBIndex,
+	couchDBIndicesPDC []*models.CouchDBIndexPdc,
+) ([]byte, error) {
 	var err error
 	connMap := map[string]interface{}{
 		"address":              address,
@@ -148,7 +156,24 @@ func getCodeTarGz(address string, rootCert string, clientKey string, clientCert 
 				return nil, err
 			}
 		}
-
+	}
+	if len(couchDBIndicesPDC) > 0 {
+		for _, pdcCouchDBIndex := range couchDBIndicesPDC {
+			header := new(tar.Header)
+			contentsBytes := []byte(pdcCouchDBIndex.Contents)
+			header.Mode = 0755
+			header.Size = int64(len(contentsBytes))
+			header.Name = fmt.Sprintf("META-INF/statedb/couchdb/collections/%s/indexes/%s", pdcCouchDBIndex.PdcName, pdcCouchDBIndex.ID)
+			// write header
+			if err := tw.WriteHeader(header); err != nil {
+				return nil, err
+			}
+			// if not a dir, write file content
+			r := bytes.NewReader(contentsBytes)
+			if _, err := io.Copy(tw, r); err != nil {
+				return nil, err
+			}
+		}
 	}
 	err = tw.Close()
 	if err != nil {
@@ -229,7 +254,11 @@ func (m mutationResolver) DeployChaincode(ctx context.Context, input models.Depl
 		privateKey,
 		certificate,
 		input.Indexes,
+		input.PdcIndexes,
 	)
+	if err != nil {
+		return nil, err
+	}
 	resClient, err := resmgmt.New(m.SDKContext)
 	if err != nil {
 		return nil, err
@@ -265,6 +294,7 @@ func (m mutationResolver) DeployChaincode(ctx context.Context, input models.Depl
 	if err != nil {
 		return nil, err
 	}
+	ioutil.WriteFile("chaincode.tar.gz", pkg, 0644)
 	packageID := lifecycle.ComputePackageID(chaincodeName, pkg)
 	signaturePolicy := input.SignaturePolicy
 	sp, err := policydsl.FromString(signaturePolicy)
