@@ -302,6 +302,7 @@ github.com/hashicorp/serf v0.8.2/go.mod h1:6hOLApaqBFA1NXqRQAsxw9QxuDEvNxSQRwA/J
 github.com/hashicorp/yamux v0.0.0-20210316155119-a95892c5f864/go.mod h1:CtWFDAQgb7dxtzFs4tWbplKIe2jSi3+5vKbgIO0SLnQ=
 github.com/hashicorp/yamux v0.0.0-20211028200310-0bc27b27de87 h1:xixZ2bWeofWV68J+x6AzmKuVM/JWCQwkWm6GW/MUR6I=
 github.com/hashicorp/yamux v0.0.0-20211028200310-0bc27b27de87/go.mod h1:CtWFDAQgb7dxtzFs4tWbplKIe2jSi3+5vKbgIO0SLnQ=
+github.com/hashicorp/yamux v0.1.2-0.20220728231903-574fd304fd65 h1:gCTPZcFU6p3rheaT966vpU9LPtfSxXgElYru5ToLryE=
 github.com/hashicorp/yamux v0.1.2-0.20220728231903-574fd304fd65/go.mod h1:CtWFDAQgb7dxtzFs4tWbplKIe2jSi3+5vKbgIO0SLnQ=
 github.com/hpcloud/tail v1.0.0/go.mod h1:ab1qPbhIpdTxEkNHXyeSf5vhxWSCs/tWer42PpOxQnU=
 github.com/hyperledger/fabric-config v0.0.5/go.mod h1:YpITBI/+ZayA3XWY5lF302K7PAsFYjEEPM/zr3hegA8=
@@ -343,6 +344,7 @@ github.com/justinas/alice v1.2.0/go.mod h1:fN5HRH/reO/zrUflLfTN43t3vXvKzvZIENsNE
 github.com/kevinmbeaulieu/eq-go v1.0.0/go.mod h1:G3S8ajA56gKBZm4UB9AOyoOS37JO3roToPzKNM8dtdM=
 github.com/kfsoftware/getout v0.0.5-beta14 h1:VWFYc15UGlyvSr1r/yZUoLomuWcre3yGhmG9pjD1RV8=
 github.com/kfsoftware/getout v0.0.5-beta14/go.mod h1:/qoSgBQ5RC//wbmf3VsmAScPSHWMVo8SKFV/Mtvd5Qg=
+github.com/kfsoftware/getout v0.0.18 h1:tivpz6h3uTbmVnqClt6lR8NFy86uPTze6slRkwxJDKQ=
 github.com/kfsoftware/getout v0.0.18/go.mod h1:RDRSDUz5eqZI9ElLDulcXQiwBdX44UEGTHOR73rchxE=
 github.com/kfsoftware/go-vhost v0.0.1/go.mod h1:4YXBbTHlkGUxJw3EmGjZjkdUo7yblUelN26ChdHGCIM=
 github.com/kisielk/errcheck v1.1.0/go.mod h1:EZBBE59ingxPouuu3KfxchcWSUPOHkagtvWXihfKN4Q=
