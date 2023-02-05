@@ -1,6 +1,6 @@
 type Query {
-    chaincodes: [Chaincode!]
-    chaincode(name: String!): Chaincode
+    chaincodes(channel: String): [Chaincode!]
+    chaincode(channel: String, name: String!): Chaincode
 }
 
 type Chaincode {

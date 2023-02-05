@@ -60,6 +60,7 @@ type startCmd struct {
 	signaturePolicy       string
 	envFile               string
 	tunnelAddress         string
+	channel               string
 }
 
 func (c startCmd) validate() error {
@@ -131,10 +132,6 @@ hlf-cc-dev listen --forward-to=%s --tunnelAddress="xxx:8082"
 	}
 
 	chaincodeAddress := tunnelCFGItem.SNI
-	//chaincodeAddress, _, err := net.SplitHostPort(fullChaincodeAddress)
-	//if err != nil {
-	//	return errors.Wrapf(err, "failed to parse chaincode address %s", fullChaincodeAddress)
-	//}
 	pdcContents := ""
 	if c.pdcFile != "" {
 		pdcContentsBytes, err := ioutil.ReadFile(c.pdcFile)
@@ -144,6 +141,7 @@ hlf-cc-dev listen --forward-to=%s --tunnelAddress="xxx:8082"
 		pdcContents = string(pdcContentsBytes)
 	}
 	var indices []*models.CouchDBIndex
+	var pdcIndices []*models.CouchDBIndexPdc
 	if c.metaInf != "" {
 		src := c.metaInf
 		// walk through 3 file in the folder
@@ -167,6 +165,21 @@ hlf-cc-dev listen --forward-to=%s --tunnelAddress="xxx:8082"
 					Contents: string(contentBytes),
 				}
 				indices = append(indices, index)
+				log.Infof("found index file: %s - %s", relname, path.Base(relname))
+			}
+			if strings.Contains(relname, "statedb/couchdb/collections") && !fi.IsDir() {
+				contentBytes, err := ioutil.ReadFile(file)
+				if err != nil {
+					return err
+				}
+				pdcName := path.Base(path.Join(relname, "../../"))
+				index := &models.CouchDBIndexPdc{
+					ID:       path.Base(relname),
+					PdcName:  pdcName,
+					Contents: string(contentBytes),
+				}
+				pdcIndices = append(pdcIndices, index)
+				log.Infof("found index for PDC %s file: %s - %s", pdcName, relname, path.Base(relname))
 			}
 			return nil
 		})
@@ -174,12 +187,16 @@ hlf-cc-dev listen --forward-to=%s --tunnelAddress="xxx:8082"
 			return err
 		}
 	}
+	log.Infof("found %d indexes %v", len(indices), indices)
+	log.Infof("found %d pdc indexes %v", len(pdcIndices), pdcIndices)
 	input := models.DeployChaincodeInput{
+		Channel:          &c.channel,
 		Name:             c.chaincode,
 		ChaincodeAddress: chaincodeAddress,
 		Pdc:              pdcContents,
 		SignaturePolicy:  c.signaturePolicy,
 		Indexes:          indices,
+		PdcIndexes:       pdcIndices,
 	}
 	var m struct {
 		DeployChaincode struct {
@@ -313,5 +330,6 @@ func NewStartCmd() *cobra.Command {
 	f.StringVar(&c.metaInf, "metaInf", "", "metadata")
 	f.StringVar(&c.signaturePolicy, "signaturePolicy", "", "Signature policy")
 	f.StringVar(&c.envFile, "env-file", "", "Env file to write the environments")
+	f.StringVar(&c.channel, "channel", "", "Channel name")
 	return cmd
 }

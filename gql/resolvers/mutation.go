@@ -10,18 +10,23 @@ import (
 	"encoding/pem"
 	"fmt"
 	"github.com/gosimple/slug"
+	"github.com/hyperledger/fabric-config/configtx"
 	"github.com/hyperledger/fabric-gateway/pkg/client"
 	pb "github.com/hyperledger/fabric-protos-go/peer"
 	clientmsp "github.com/hyperledger/fabric-sdk-go/pkg/client/msp"
 	"github.com/hyperledger/fabric-sdk-go/pkg/client/resmgmt"
+	hlfcontext "github.com/hyperledger/fabric-sdk-go/pkg/common/providers/context"
 	"github.com/hyperledger/fabric-sdk-go/pkg/common/providers/fab"
 	"github.com/hyperledger/fabric-sdk-go/pkg/fab/ccpackager/lifecycle"
+	"github.com/hyperledger/fabric-sdk-go/pkg/fab/resource"
+	"github.com/hyperledger/fabric-sdk-go/pkg/fabsdk"
 	"github.com/hyperledger/fabric-sdk-go/third_party/github.com/hyperledger/fabric/common/policydsl"
 	"github.com/kfsoftware/hlf-cc-dev/gql/models"
 	"github.com/kfsoftware/hlf-cc-dev/log"
 	"github.com/lithammer/shortuuid/v3"
 	"github.com/pkg/errors"
 	"io"
+	"io/ioutil"
 	"net"
 	"strings"
 	"sync"
@@ -93,7 +98,14 @@ func getChaincodePackage(label string, codeTarGz []byte) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func getCodeTarGz(address string, rootCert string, clientKey string, clientCert string, couchDBIndices []*models.CouchDBIndex) ([]byte, error) {
+func getCodeTarGz(
+	address string,
+	rootCert string,
+	clientKey string,
+	clientCert string,
+	couchDBIndices []*models.CouchDBIndex,
+	couchDBIndicesPDC []*models.CouchDBIndexPdc,
+) ([]byte, error) {
 	var err error
 	connMap := map[string]interface{}{
 		"address":              address,
@@ -144,7 +156,24 @@ func getCodeTarGz(address string, rootCert string, clientKey string, clientCert 
 				return nil, err
 			}
 		}
-
+	}
+	if len(couchDBIndicesPDC) > 0 {
+		for _, pdcCouchDBIndex := range couchDBIndicesPDC {
+			header := new(tar.Header)
+			contentsBytes := []byte(pdcCouchDBIndex.Contents)
+			header.Mode = 0755
+			header.Size = int64(len(contentsBytes))
+			header.Name = fmt.Sprintf("META-INF/statedb/couchdb/collections/%s/indexes/%s", pdcCouchDBIndex.PdcName, pdcCouchDBIndex.ID)
+			// write header
+			if err := tw.WriteHeader(header); err != nil {
+				return nil, err
+			}
+			// if not a dir, write file content
+			r := bytes.NewReader(contentsBytes)
+			if _, err := io.Copy(tw, r); err != nil {
+				return nil, err
+			}
+		}
 	}
 	err = tw.Close()
 	if err != nil {
@@ -167,6 +196,10 @@ func (f *mspFilter) Accept(peer fab.Peer) bool {
 }
 func (m mutationResolver) DeployChaincode(ctx context.Context, input models.DeployChaincodeInput) (*models.DeployChaincodeResponse, error) {
 	chaincodeName := slug.Make(input.Name)
+	channel := m.Channel
+	if input.Channel != nil && *input.Channel != "" {
+		channel = *input.Channel
+	}
 	address := input.ChaincodeAddress
 	host, _, err := net.SplitHostPort(address)
 	if err != nil {
@@ -221,10 +254,38 @@ func (m mutationResolver) DeployChaincode(ctx context.Context, input models.Depl
 		privateKey,
 		certificate,
 		input.Indexes,
+		input.PdcIndexes,
 	)
+	if err != nil {
+		return nil, err
+	}
 	resClient, err := resmgmt.New(m.SDKContext)
 	if err != nil {
 		return nil, err
+	}
+	block, err := resClient.QueryConfigBlockFromOrderer(channel)
+	if err != nil {
+		return nil, err
+	}
+	cfgBlock, err := resource.ExtractConfigFromBlock(block)
+	if err != nil {
+		return nil, err
+	}
+	cftxGen := configtx.New(cfgBlock)
+	appConf, err := cftxGen.Application().Configuration()
+	if err != nil {
+		return nil, err
+	}
+	mapSdkContext := map[string]hlfcontext.ClientProvider{}
+	for _, organization := range appConf.Organizations {
+		sdk, err := fabsdk.New(m.ConfigBackend)
+		if err != nil {
+			return nil, err
+		}
+		mapSdkContext[organization.Name] = sdk.Context(
+			fabsdk.WithUser(m.User),
+			fabsdk.WithOrg(organization.MSP.Name),
+		)
 	}
 	version := "1"
 	sequence := 1
@@ -233,16 +294,14 @@ func (m mutationResolver) DeployChaincode(ctx context.Context, input models.Depl
 	if err != nil {
 		return nil, err
 	}
+	ioutil.WriteFile("chaincode.tar.gz", pkg, 0644)
 	packageID := lifecycle.ComputePackageID(chaincodeName, pkg)
 	signaturePolicy := input.SignaturePolicy
 	sp, err := policydsl.FromString(signaturePolicy)
 	if err != nil {
 		return nil, err
 	}
-	channel := m.Channel
-	if input.Channel != "" {
-		channel = input.Channel
-	}
+
 	committedCCs, err := resClient.LifecycleQueryCommittedCC(channel, resmgmt.LifecycleQueryCommittedCCRequest{Name: chaincodeName})
 	if err != nil {
 		log.Warnf("Error when getting commited chaincodes: %v", err)
@@ -271,8 +330,8 @@ func (m mutationResolver) DeployChaincode(ctx context.Context, input models.Depl
 		InitRequired:      false,
 	}
 	var wg sync.WaitGroup
-	wg.Add(len(m.SDKContextMap))
-	for mspID, sdkContext := range m.SDKContextMap {
+	wg.Add(len(mapSdkContext))
+	for mspID, sdkContext := range mapSdkContext {
 		mspID := mspID
 		sdkContext := sdkContext
 		go func() {

@@ -10,6 +10,7 @@ import (
 	"github.com/hyperledger/fabric-gateway/pkg/client"
 	clientmsp "github.com/hyperledger/fabric-sdk-go/pkg/client/msp"
 	"github.com/hyperledger/fabric-sdk-go/pkg/common/providers/context"
+	"github.com/hyperledger/fabric-sdk-go/pkg/common/providers/core"
 	"github.com/hyperledger/fabric-sdk-go/pkg/common/providers/msp"
 	"github.com/hyperledger/fabric-sdk-go/pkg/fabsdk"
 	"github.com/kfsoftware/hlf-cc-dev/gql"
@@ -37,11 +38,12 @@ type BlockchainServerOpts struct {
 	SDKContextMap  map[string]context.ClientProvider
 	GWClient       *client.Gateway
 
-	Channel      string
-	MSPClient    *clientmsp.Client
-	CAConfig     *msp.CAConfig
-	Organization string
-	User         string
+	Channel       string
+	MSPClient     *clientmsp.Client
+	CAConfig      *msp.CAConfig
+	Organization  string
+	User          string
+	ConfigBackend core.ConfigProvider
 }
 
 type BlockchainAPIServer struct {
@@ -82,6 +84,7 @@ func (a *BlockchainAPIServer) setupHttpServer() http.Handler {
 			CAConfig:      a.CAConfig,
 			SDKContextMap: a.SDKContextMap,
 			Organization:  a.Organization,
+			ConfigBackend: a.ConfigBackend,
 			User:          a.User,
 			GWClient:      a.GWClient,
 		},
