@@ -7,12 +7,11 @@ require (
 	github.com/VividCortex/gohistogram v1.0.0 // indirect
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/gosimple/slug v1.12.0
-	github.com/hashicorp/yamux v0.0.0-20211028200310-0bc27b27de87 // indirect
 	github.com/hyperledger/fabric-config v0.1.0
 	github.com/hyperledger/fabric-gateway v1.0.1
 	github.com/hyperledger/fabric-protos-go v0.0.0-20220315113721-7dc293e117f7
 	github.com/hyperledger/fabric-sdk-go v1.0.1-0.20220124135247-4f34271d9b0f
-	github.com/kfsoftware/getout v0.0.5-beta14
+	github.com/kfsoftware/getout v0.0.18
 	github.com/lib/pq v1.10.2
 	github.com/lithammer/shortuuid/v3 v3.0.7
 	github.com/mitchellh/mapstructure v1.4.1 // indirect
